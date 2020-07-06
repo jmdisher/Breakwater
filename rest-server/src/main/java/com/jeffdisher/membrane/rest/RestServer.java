@@ -19,7 +19,10 @@ import com.jeffdisher.laminar.utils.Assert;
 public class RestServer {
 	private final EntryPoint _entryPoint;
 	private final Server _server;
-	private List<HandlerTuple> _handlers;
+	private List<HandlerTuple<IDeleteHandler>> _deleteHandlers;
+	private List<HandlerTuple<IGetHandler>> _getHandlers;
+	private List<HandlerTuple<IPostHandler>> _postHandlers;
+	private List<HandlerTuple<IPutHandler>> _putHandlers;
 
 	public RestServer(int port) {
 		_entryPoint = new EntryPoint();
@@ -28,13 +31,34 @@ public class RestServer {
 		connector.setPort(port);
 		_server.setConnectors(new ServerConnector[] { connector });
 		_server.setHandler(_entryPoint);
-		_handlers = new ArrayList<>();
+		_deleteHandlers = new ArrayList<>();
+		_getHandlers = new ArrayList<>();
+		_postHandlers = new ArrayList<>();
+		_putHandlers = new ArrayList<>();
 	}
 
-	public void addHandler(String method, String pathPrefix, int variableCount, IHandler handler) {
+	public void addDeleteHandler(String pathPrefix, int variableCount, IDeleteHandler handler) {
 		Assert.assertTrue(!pathPrefix.endsWith("/"));
 		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_handlers.add(0, new HandlerTuple(method, pathPrefix, variableCount, handler));
+		_deleteHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	}
+
+	public void addGetHandler(String pathPrefix, int variableCount, IGetHandler handler) {
+		Assert.assertTrue(!pathPrefix.endsWith("/"));
+		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
+		_getHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	}
+
+	public void addPostHandler(String pathPrefix, int variableCount, IPostHandler handler) {
+		Assert.assertTrue(!pathPrefix.endsWith("/"));
+		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
+		_postHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	}
+
+	public void addPutHandler(String pathPrefix, int variableCount, IPutHandler handler) {
+		Assert.assertTrue(!pathPrefix.endsWith("/"));
+		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
+		_putHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
 	}
 
 	public void start() {
@@ -61,37 +85,76 @@ public class RestServer {
 		@Override
 		public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 			String method = baseRequest.getMethod();
-			// Remove the handlers in case we need to add more in processing.
-			List<HandlerTuple> handlersCopy = _handlers;
-			_handlers = new ArrayList<>();
-			
-			for (HandlerTuple tuple : handlersCopy) {
-				if (tuple.canHandle(method, target)) {
-					String[] variables = tuple.parseVariables(target);
-					tuple.handler.handle(response, variables, baseRequest.getInputStream());
-					baseRequest.setHandled(true);
+			if ("DELETE".equals(method)) {
+				// Remove the handlers in case we need to add more in processing.
+				List<HandlerTuple<IDeleteHandler>> handlersCopy = _deleteHandlers;
+				_deleteHandlers = new ArrayList<>();
+				
+				for (HandlerTuple<IDeleteHandler> tuple : handlersCopy) {
+					if (tuple.canHandle(method, target)) {
+						String[] variables = tuple.parseVariables(target);
+						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						baseRequest.setHandled(true);
+					}
 				}
+				_deleteHandlers.addAll(handlersCopy);
+			} else if ("GET".equals(method)) {
+				// Remove the handlers in case we need to add more in processing.
+				List<HandlerTuple<IGetHandler>> handlersCopy = _getHandlers;
+				_getHandlers = new ArrayList<>();
+				
+				for (HandlerTuple<IGetHandler> tuple : handlersCopy) {
+					if (tuple.canHandle(method, target)) {
+						String[] variables = tuple.parseVariables(target);
+						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						baseRequest.setHandled(true);
+					}
+				}
+				_getHandlers.addAll(handlersCopy);
+			} else if ("POST".equals(method)) {
+				// Remove the handlers in case we need to add more in processing.
+				List<HandlerTuple<IPostHandler>> handlersCopy = _postHandlers;
+				_postHandlers = new ArrayList<>();
+				
+				for (HandlerTuple<IPostHandler> tuple : handlersCopy) {
+					if (tuple.canHandle(method, target)) {
+						String[] variables = tuple.parseVariables(target);
+						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						baseRequest.setHandled(true);
+					}
+				}
+				_postHandlers.addAll(handlersCopy);
+			} else if ("PUT".equals(method)) {
+				// Remove the handlers in case we need to add more in processing.
+				List<HandlerTuple<IPutHandler>> handlersCopy = _putHandlers;
+				_putHandlers = new ArrayList<>();
+				
+				for (HandlerTuple<IPutHandler> tuple : handlersCopy) {
+					if (tuple.canHandle(method, target)) {
+						String[] variables = tuple.parseVariables(target);
+						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						baseRequest.setHandled(true);
+					}
+				}
+				_putHandlers.addAll(handlersCopy);
 			}
-			_handlers.addAll(handlersCopy);
 		}
 	}
 
 
-	private static class HandlerTuple {
-		private final String _method;
+	private static class HandlerTuple<T> {
 		private final String _pathPrefix;
 		private final int _variableCount;
-		public final IHandler handler;
+		public final T handler;
 		
-		public HandlerTuple(String method, String pathPrefix, int variableCount, IHandler handler) {
-			_method = method;
+		public HandlerTuple(String pathPrefix, int variableCount, T handler) {
 			_pathPrefix = pathPrefix;
 			_variableCount = variableCount;
 			this.handler = handler;
 		}
 		
 		public boolean canHandle(String method, String target) {
-			return _method.equals(method) && target.startsWith(_pathPrefix) && ((target.substring(_pathPrefix.length()).split("/").length - 1) == _variableCount);
+			return target.startsWith(_pathPrefix) && ((target.substring(_pathPrefix.length()).split("/").length - 1) == _variableCount);
 		}
 		
 		public String[] parseVariables(String target) {

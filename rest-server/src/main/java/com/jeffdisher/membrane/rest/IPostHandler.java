@@ -6,6 +6,6 @@ import java.io.InputStream;
 import javax.servlet.http.HttpServletResponse;
 
 
-public interface IHandler {
+public interface IPostHandler {
 	void handle(HttpServletResponse response, String[] pathVariables, InputStream inputStream) throws IOException;
 }

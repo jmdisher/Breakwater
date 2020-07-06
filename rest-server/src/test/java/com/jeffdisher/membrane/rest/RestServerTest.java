@@ -18,7 +18,7 @@ public class RestServerTest {
 	public void testBasicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080);
-		server.addHandler("GET", "/test1", 0, new IHandler() {
+		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
@@ -36,7 +36,7 @@ public class RestServerTest {
 	@Test
 	public void testNotFound() throws Throwable {
 		RestServer server = new RestServer(8080);
-		server.addHandler("GET", "/test1", 0, new IHandler() {
+		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
@@ -53,13 +53,13 @@ public class RestServerTest {
 	public void testDynamicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080);
-		server.addHandler("GET", "/test1", 0, new IHandler() {
+		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
-				server.addHandler("GET", "/test2", 1, new IHandler() {
+				server.addGetHandler("/test2", 1, new IGetHandler() {
 					@Override
 					public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 						response.setContentType("text/plain;charset=utf-8");
@@ -82,7 +82,7 @@ public class RestServerTest {
 	public void testPutBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080);
-		server.addHandler("PUT", "/test", 0, new IHandler() {
+		server.addPutHandler("/test", 0, new IPutHandler() {
 			@Override
 			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("application/octet-stream");
