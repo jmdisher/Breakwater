@@ -119,7 +119,7 @@ public class RestServer {
 				for (HandlerTuple<IPostHandler> tuple : handlersCopy) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables);
+						tuple.handler.handle(response, variables, request.getParameterMap());
 						baseRequest.setHandled(true);
 					}
 				}

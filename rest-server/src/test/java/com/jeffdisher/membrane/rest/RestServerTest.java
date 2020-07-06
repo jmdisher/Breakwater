@@ -1,10 +1,13 @@
 package com.jeffdisher.membrane.rest;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 import javax.servlet.http.HttpServletResponse;
@@ -103,6 +106,31 @@ public class RestServerTest {
 		connection.setDoOutput(true);
 		connection.getOutputStream().write(buffer);
 		Assert.assertEquals(buffer.length, connection.getContentLength());
+		stopLatch.await();
+		server.stop();
+	}
+
+	@Test
+	public void testPostVars() throws Throwable {
+		CountDownLatch stopLatch = new CountDownLatch(1);
+		RestServer server = new RestServer(8080);
+		server.addPostHandler("/test", 0, new IPostHandler() {
+			@Override
+			public void handle(HttpServletResponse response, String[] variables, Map<String, String[]> postVariables) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				response.getWriter().print("" + postVariables.size());
+				stopLatch.countDown();
+			}});
+		server.start();
+		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test").openConnection();
+		connection.setRequestMethod("POST");
+		connection.setDoOutput(true);
+		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()));
+		writer.write("var1=val1&var2=&var1=val2");
+		writer.flush();
+		// We expect it to write "2", since there are 2 top-level keys.
+		Assert.assertEquals("2".getBytes()[0], (byte)connection.getInputStream().read());
 		stopLatch.await();
 		server.stop();
 	}
