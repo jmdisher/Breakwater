@@ -7,5 +7,5 @@ import javax.servlet.http.HttpServletResponse;
 
 
 public interface IPostHandler {
-	void handle(HttpServletResponse response, String[] pathVariables, Map<String, String[]> postVariables) throws IOException;
+	void handle(HttpServletResponse response, String[] pathVariables, Map<String, byte[]> parts) throws IOException;
 }

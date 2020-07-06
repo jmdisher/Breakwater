@@ -1,12 +1,17 @@
 package com.jeffdisher.membrane.rest;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.Part;
 
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
@@ -17,6 +22,8 @@ import com.jeffdisher.laminar.utils.Assert;
 
 
 public class RestServer {
+	private final static int MAX_POST_SIZE = 64 * 1024;
+
 	private final EntryPoint _entryPoint;
 	private final Server _server;
 	private List<HandlerTuple<IDeleteHandler>> _deleteHandlers;
@@ -119,7 +126,23 @@ public class RestServer {
 				for (HandlerTuple<IPostHandler> tuple : handlersCopy) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables, request.getParameterMap());
+						request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
+						Map<String, byte[]> parts = new HashMap<>();
+						for (Part part : request.getParts()) {
+							String name = part.getName();
+							Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
+							byte[] data = new byte[(int)part.getSize()];
+							if (data.length > 0) {
+								InputStream stream = part.getInputStream();
+								int didRead = stream.read(data);
+								while (didRead < data.length) {
+									didRead += stream.read(data, didRead, data.length - didRead);
+								}
+							}
+							parts.put(name, data);
+							part.delete();
+						}
+						tuple.handler.handle(response, variables, parts);
 						baseRequest.setHandled(true);
 					}
 				}

@@ -111,27 +111,44 @@ public class RestServerTest {
 	}
 
 	@Test
-	public void testPostVars() throws Throwable {
+	public void testPostParts() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, Map<String, String[]> postVariables) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables, Map<String, byte[]> parts) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
-				response.getWriter().print("" + postVariables.size());
+				response.getWriter().print("" + parts.size());
 				stopLatch.countDown();
 			}});
 		server.start();
 		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test").openConnection();
 		connection.setRequestMethod("POST");
 		connection.setDoOutput(true);
+		// We need to send the variables as a multi-part POST, so we need a boundary and then we can start writing.
+		String boundary = "===" + System.currentTimeMillis() + "===";
+		connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()));
-		writer.write("var1=val1&var2=&var1=val2");
-		writer.flush();
+		_addPart(writer, boundary, "var1", "val1");
+		_addPart(writer, boundary, "var2", "");
+		writer.append("\r\n");
+		writer.append("--" + boundary + "--").append("\r\n");
+		writer.close();
 		// We expect it to write "2", since there are 2 top-level keys.
 		Assert.assertEquals("2".getBytes()[0], (byte)connection.getInputStream().read());
 		stopLatch.await();
 		server.stop();
+	}
+
+
+	private void _addPart(BufferedWriter writer, String boundary, String key, String value) throws IOException {
+		String hyphens = "--";
+		String lineFeed = "\r\n";
+		writer.append(hyphens + boundary).append(lineFeed);
+		writer.append("Content-Disposition: form-data; name=\"" + key + "\"").append(lineFeed);
+		writer.append("Content-Type: text/plain; charset=utf-8").append(lineFeed);
+		writer.append(lineFeed);
+		writer.append(value).append(lineFeed);
 	}
 }
