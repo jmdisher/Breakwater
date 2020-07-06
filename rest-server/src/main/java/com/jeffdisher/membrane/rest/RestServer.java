@@ -68,8 +68,7 @@ public class RestServer {
 			for (HandlerTuple tuple : handlersCopy) {
 				if (tuple.canHandle(method, target)) {
 					String[] variables = tuple.parseVariables(target);
-					String inputLine = baseRequest.getReader().readLine();
-					tuple.handler.handle(response, variables, inputLine);
+					tuple.handler.handle(response, variables, baseRequest.getInputStream());
 					baseRequest.setHandled(true);
 				}
 			}

@@ -1,6 +1,8 @@
 package com.jeffdisher.membrane.rest;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.CountDownLatch;
@@ -18,7 +20,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addHandler("GET", "/test1", 0, new IHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, String inputLine) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -36,7 +38,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addHandler("GET", "/test1", 0, new IHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, String inputLine) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -53,13 +55,13 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addHandler("GET", "/test1", 0, new IHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, String inputLine) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
 				server.addHandler("GET", "/test2", 1, new IHandler() {
 					@Override
-					public void handle(HttpServletResponse response, String[] variables, String inputLine) throws IOException {
+					public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 						response.setContentType("text/plain;charset=utf-8");
 						response.setStatus(HttpServletResponse.SC_OK);
 						response.getWriter().print(variables[0]);
@@ -76,4 +78,32 @@ public class RestServerTest {
 		server.stop();
 	}
 
+	@Test
+	public void testPutBinary() throws Throwable {
+		CountDownLatch stopLatch = new CountDownLatch(1);
+		RestServer server = new RestServer(8080);
+		server.addHandler("PUT", "/test", 0, new IHandler() {
+			@Override
+			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+				response.setContentType("application/octet-stream");
+				response.setStatus(HttpServletResponse.SC_OK);
+				OutputStream stream = response.getOutputStream();
+				byte[] buffer = new byte[2];
+				int didRead = inputStream.read(buffer);
+				while (-1 != didRead) {
+					stream.write(buffer, 0, didRead);
+					didRead = inputStream.read(buffer);
+				}
+				stopLatch.countDown();
+			}});
+		server.start();
+		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test").openConnection();
+		connection.setRequestMethod("PUT");
+		byte[] buffer = new byte[] {1,2,3,4,5};
+		connection.setDoOutput(true);
+		connection.getOutputStream().write(buffer);
+		Assert.assertEquals(buffer.length, connection.getContentLength());
+		stopLatch.await();
+		server.stop();
+	}
 }
