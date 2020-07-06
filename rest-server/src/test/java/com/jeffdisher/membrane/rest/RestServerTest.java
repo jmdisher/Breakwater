@@ -20,7 +20,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -38,7 +38,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -55,13 +55,13 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+			public void handle(HttpServletResponse response, String[] variables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
 				server.addGetHandler("/test2", 1, new IGetHandler() {
 					@Override
-					public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+					public void handle(HttpServletResponse response, String[] variables) throws IOException {
 						response.setContentType("text/plain;charset=utf-8");
 						response.setStatus(HttpServletResponse.SC_OK);
 						response.getWriter().print(variables[0]);

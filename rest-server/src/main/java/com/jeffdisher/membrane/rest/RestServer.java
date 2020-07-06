@@ -93,7 +93,7 @@ public class RestServer {
 				for (HandlerTuple<IDeleteHandler> tuple : handlersCopy) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						tuple.handler.handle(response, variables);
 						baseRequest.setHandled(true);
 					}
 				}
@@ -106,7 +106,7 @@ public class RestServer {
 				for (HandlerTuple<IGetHandler> tuple : handlersCopy) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						tuple.handler.handle(response, variables);
 						baseRequest.setHandled(true);
 					}
 				}
@@ -119,7 +119,7 @@ public class RestServer {
 				for (HandlerTuple<IPostHandler> tuple : handlersCopy) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						tuple.handler.handle(response, variables);
 						baseRequest.setHandled(true);
 					}
 				}
