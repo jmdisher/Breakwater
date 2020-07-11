@@ -63,7 +63,6 @@ public class RestHelpers {
 		for (Map.Entry<String, byte[]> entry : toSend.entrySet()) {
 			_addPart(outputStream, writer, boundary, entry.getKey(), entry.getValue());
 		}
-		writer.append("\r\n");
 		writer.append("--" + boundary + "--").append("\r\n");
 		writer.close();
 		
