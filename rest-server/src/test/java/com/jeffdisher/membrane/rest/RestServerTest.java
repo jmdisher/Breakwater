@@ -1,12 +1,10 @@
 package com.jeffdisher.membrane.rest;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
@@ -30,8 +28,8 @@ public class RestServerTest {
 				stopLatch.countDown();
 			}});
 		server.start();
-		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test1").openConnection();
-		Assert.assertEquals("TESTING".length(), connection.getContentLength());
+		byte[] data = RestHelpers.get("http://localhost:8080/test1");
+		Assert.assertArrayEquals("TESTING".getBytes(StandardCharsets.UTF_8), data);
 		stopLatch.await();
 		server.stop();
 	}
@@ -47,8 +45,8 @@ public class RestServerTest {
 				response.getWriter().print("TESTING");
 			}});
 		server.start();
-		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test2").openConnection();
-		Assert.assertEquals(404, connection.getResponseCode());
+		byte[] data = RestHelpers.get("http://localhost:8080/test2");
+		Assert.assertNull(data);
 		server.stop();
 	}
 
@@ -73,10 +71,10 @@ public class RestServerTest {
 				stopLatch.countDown();
 			}});
 		server.start();
-		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test1").openConnection();
-		Assert.assertEquals("TESTING".length(), connection.getContentLength());
-		connection = (HttpURLConnection)new URL("http://localhost:8080/test2/TEST").openConnection();
-		Assert.assertEquals("TEST".length(), connection.getContentLength());
+		byte[] data = RestHelpers.get("http://localhost:8080/test1");
+		Assert.assertArrayEquals("TESTING".getBytes(StandardCharsets.UTF_8), data);
+		byte[] data2 = RestHelpers.get("http://localhost:8080/test2/TEST");
+		Assert.assertArrayEquals("TEST".getBytes(StandardCharsets.UTF_8), data2);
 		stopLatch.await();
 		server.stop();
 	}
@@ -100,12 +98,9 @@ public class RestServerTest {
 				stopLatch.countDown();
 			}});
 		server.start();
-		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test").openConnection();
-		connection.setRequestMethod("PUT");
 		byte[] buffer = new byte[] {1,2,3,4,5};
-		connection.setDoOutput(true);
-		connection.getOutputStream().write(buffer);
-		Assert.assertEquals(buffer.length, connection.getContentLength());
+		byte[] data = RestHelpers.put("http://localhost:8080/test", buffer);
+		Assert.assertArrayEquals(buffer, data);
 		stopLatch.await();
 		server.stop();
 	}
@@ -123,32 +118,14 @@ public class RestServerTest {
 				stopLatch.countDown();
 			}});
 		server.start();
-		HttpURLConnection connection = (HttpURLConnection)new URL("http://localhost:8080/test").openConnection();
-		connection.setRequestMethod("POST");
-		connection.setDoOutput(true);
-		// We need to send the variables as a multi-part POST, so we need a boundary and then we can start writing.
-		String boundary = "===" + System.currentTimeMillis() + "===";
-		connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()));
-		_addPart(writer, boundary, "var1", "val1");
-		_addPart(writer, boundary, "var2", "");
-		writer.append("\r\n");
-		writer.append("--" + boundary + "--").append("\r\n");
-		writer.close();
+		
+		Map<String, byte[]> postParts = new HashMap<>();
+		postParts.put("var1", "val1".getBytes(StandardCharsets.UTF_8));
+		postParts.put("var2", "".getBytes(StandardCharsets.UTF_8));
+		byte[] data = RestHelpers.post("http://localhost:8080/test", postParts);
 		// We expect it to write "2", since there are 2 top-level keys.
-		Assert.assertEquals("2".getBytes()[0], (byte)connection.getInputStream().read());
+		Assert.assertArrayEquals("2".getBytes(), data);
 		stopLatch.await();
 		server.stop();
-	}
-
-
-	private void _addPart(BufferedWriter writer, String boundary, String key, String value) throws IOException {
-		String hyphens = "--";
-		String lineFeed = "\r\n";
-		writer.append(hyphens + boundary).append(lineFeed);
-		writer.append("Content-Disposition: form-data; name=\"" + key + "\"").append(lineFeed);
-		writer.append("Content-Type: text/plain; charset=utf-8").append(lineFeed);
-		writer.append(lineFeed);
-		writer.append(value).append(lineFeed);
 	}
 }
