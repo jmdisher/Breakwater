@@ -128,4 +128,24 @@ public class RestServerTest {
 		stopLatch.await();
 		server.stop();
 	}
+
+	@Test
+	public void testDelete() throws Throwable {
+		CountDownLatch stopLatch = new CountDownLatch(1);
+		RestServer server = new RestServer(8080);
+		server.addDeleteHandler("/test", 0, new IDeleteHandler() {
+			@Override
+			public void handle(HttpServletResponse response, String[] pathVariables) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				response.getWriter().print("DELETE/test");
+				stopLatch.countDown();
+			}});
+		server.start();
+		
+		byte[] data = RestHelpers.delete("http://localhost:8080/test");
+		Assert.assertArrayEquals("DELETE/test".getBytes(), data);
+		stopLatch.await();
+		server.stop();
+	}
 }

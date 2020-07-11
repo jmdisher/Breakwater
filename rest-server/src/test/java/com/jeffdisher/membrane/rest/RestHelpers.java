@@ -65,6 +65,19 @@ public class RestHelpers {
 		}
 		writer.append("--" + boundary + "--").append("\r\n");
 		writer.close();
+		InputStream stream = connection.getInputStream();
+		byte[] buffer = new byte[connection.getContentLength()];
+		int didRead = 0;
+		while (didRead < buffer.length) {
+			int size = stream.read(buffer, didRead, buffer.length - didRead);
+			didRead += size;
+		}
+		return buffer;
+	}
+
+	public static byte[] delete(String url) throws MalformedURLException, IOException {
+		HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
+		connection.setRequestMethod("DELETE");
 		
 		InputStream stream = connection.getInputStream();
 		byte[] buffer = new byte[connection.getContentLength()];
