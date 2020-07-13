@@ -17,8 +17,8 @@
 
 	<repositories>
 		<repository>
-			<id>committed</id>
-			<url>file://${main.basedir}/repo</url>
+			<id>laminar-repo</id>
+			<url>https://github.com/jmdisher/Laminar/raw/maven/repo</url>
 		</repository>
 	</repositories>
 
