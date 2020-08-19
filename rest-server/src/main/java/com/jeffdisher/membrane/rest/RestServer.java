@@ -1,9 +1,10 @@
 package com.jeffdisher.membrane.rest;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -17,12 +18,15 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.AbstractHandler;
+import org.eclipse.jetty.util.MultiMap;
+import org.eclipse.jetty.util.UrlEncoded;
 
 import com.jeffdisher.laminar.utils.Assert;
 
 
 public class RestServer {
 	private final static int MAX_POST_SIZE = 64 * 1024;
+	private final static int MAX_VARIABLES = 16;
 
 	private final EntryPoint _entryPoint;
 	private final Server _server;
@@ -114,23 +118,71 @@ public class RestServer {
 				for (HandlerTuple<IPostHandler> tuple : _postHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
-						Map<String, byte[]> parts = new HashMap<>();
-						for (Part part : request.getParts()) {
-							String name = part.getName();
-							Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
-							byte[] data = new byte[(int)part.getSize()];
-							if (data.length > 0) {
-								InputStream stream = part.getInputStream();
-								int didRead = stream.read(data);
-								while (didRead < data.length) {
-									didRead += stream.read(data, didRead, data.length - didRead);
+						StringMultiMap<byte[]> parts = null;
+						StringMultiMap<String> form = null;
+						byte[] raw = null;
+						// This line may include things like boundary, etc, so it can't be strict equality.
+						String contentType = request.getContentType();
+						boolean isMultiPart = (null != contentType) && contentType.startsWith("multipart/form-data");
+						boolean isFormEncoded = (null != contentType) && contentType.startsWith("application/x-www-form-urlencoded");
+						
+						if (isMultiPart) {
+							parts = new StringMultiMap<>();
+							request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
+							for (Part part : request.getParts()) {
+								String name = part.getName();
+								Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
+								byte[] data = new byte[(int)part.getSize()];
+								if (data.length > 0) {
+									InputStream stream = part.getInputStream();
+									int didRead = stream.read(data);
+									while (didRead < data.length) {
+										didRead += stream.read(data, didRead, data.length - didRead);
+									}
+								}
+								parts.append(name, data);
+								part.delete();
+								if (parts.valueCount() > MAX_VARIABLES) {
+									// We will only read the first MAX_VARIABLES, much like the form-encoded.
+									break;
 								}
 							}
-							parts.put(name, data);
-							part.delete();
+						} else if (isFormEncoded) {
+							form = new StringMultiMap<>();
+							MultiMap<String> parsed = new MultiMap<String>();
+							UrlEncoded.decodeTo(request.getInputStream(), parsed, StandardCharsets.UTF_8, MAX_POST_SIZE, MAX_VARIABLES);
+							for (Map.Entry<String, List<String>> entry : parsed.entrySet()) {
+								String key = entry.getKey();
+								for (String value : entry.getValue()) {
+									form.append(key, value);
+								}
+							}
+						} else {
+							// Note that we can't rely on the content length since the client may not send it so only allow what we would normally allow for a single variable entry.
+							ByteArrayOutputStream holder = new ByteArrayOutputStream();
+							InputStream stream = request.getInputStream();
+							boolean keepReading = true;
+							byte[] temp = new byte[1024];
+							int bytesRead = 0;
+							while (keepReading) {
+								int didRead = stream.read(temp);
+								if (didRead > 0) {
+									holder.write(temp, 0, didRead);
+									bytesRead += didRead;
+									if (bytesRead >= MAX_POST_SIZE) {
+										keepReading = false;
+									}
+								} else {
+									keepReading = false;
+								}
+							}
+							int validSize = (bytesRead > MAX_POST_SIZE)
+									? MAX_POST_SIZE
+									: bytesRead;
+							raw = new byte[validSize];
+							System.arraycopy(holder.toByteArray(), 0, raw, 0, validSize);
 						}
-						tuple.handler.handle(response, variables, parts);
+						tuple.handler.handle(response, variables, form, parts, raw);
 						baseRequest.setHandled(true);
 						break;
 					}

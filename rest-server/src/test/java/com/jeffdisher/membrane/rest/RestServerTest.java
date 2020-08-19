@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 import javax.servlet.http.HttpServletResponse;
@@ -111,18 +109,18 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, Map<String, byte[]> parts) throws IOException {
+			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
-				response.getWriter().print("" + parts.size());
+				response.getWriter().print("" + multiPart.valueCount());
 				stopLatch.countDown();
 			}});
 		server.start();
 		
-		Map<String, byte[]> postParts = new HashMap<>();
-		postParts.put("var1", "val1".getBytes(StandardCharsets.UTF_8));
-		postParts.put("var2", "".getBytes(StandardCharsets.UTF_8));
-		byte[] data = RestHelpers.post("http://localhost:8080/test", postParts);
+		StringMultiMap<byte[]> postParts = new StringMultiMap<>();
+		postParts.append("var1", "val1".getBytes(StandardCharsets.UTF_8));
+		postParts.append("var2", "".getBytes(StandardCharsets.UTF_8));
+		byte[] data = RestHelpers.postParts("http://localhost:8080/test", postParts);
 		// We expect it to write "2", since there are 2 top-level keys.
 		Assert.assertArrayEquals("2".getBytes(), data);
 		stopLatch.await();
@@ -145,6 +143,78 @@ public class RestServerTest {
 		
 		byte[] data = RestHelpers.delete("http://localhost:8080/test");
 		Assert.assertArrayEquals("DELETE/test".getBytes(), data);
+		stopLatch.await();
+		server.stop();
+	}
+
+	@Test
+	public void testPostPartsDuplicate() throws Throwable {
+		CountDownLatch stopLatch = new CountDownLatch(1);
+		RestServer server = new RestServer(8080);
+		server.addPostHandler("/test", 0, new IPostHandler() {
+			@Override
+			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				response.getWriter().print("" + multiPart.valueCount());
+				stopLatch.countDown();
+			}});
+		server.start();
+		
+		StringMultiMap<byte[]> postParts = new StringMultiMap<>();
+		postParts.append("var1", "val1".getBytes(StandardCharsets.UTF_8));
+		postParts.append("var1", "a".getBytes(StandardCharsets.UTF_8));
+		postParts.append("var2", "b".getBytes(StandardCharsets.UTF_8));
+		byte[] data = RestHelpers.postParts("http://localhost:8080/test", postParts);
+		// We expect it to write "3", since there are 3 elements.
+		Assert.assertArrayEquals("3".getBytes(), data);
+		stopLatch.await();
+		server.stop();
+	}
+
+	@Test
+	public void testPostFormDuplicate() throws Throwable {
+		CountDownLatch stopLatch = new CountDownLatch(1);
+		RestServer server = new RestServer(8080);
+		server.addPostHandler("/test", 0, new IPostHandler() {
+			@Override
+			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				response.getWriter().print("" + formVariables.valueCount());
+				stopLatch.countDown();
+			}});
+		server.start();
+		
+		StringMultiMap<String> form = new StringMultiMap<>();
+		form.append("var1", "val1");
+		form.append("var1", "a");
+		form.append("var2", "b");
+		byte[] data = RestHelpers.postForm("http://localhost:8080/test", form);
+		// We expect it to write "3", since there are 3 elements.
+		Assert.assertArrayEquals("3".getBytes(), data);
+		stopLatch.await();
+		server.stop();
+	}
+
+	@Test
+	public void testPostRawBinary() throws Throwable {
+		CountDownLatch stopLatch = new CountDownLatch(1);
+		RestServer server = new RestServer(8080);
+		server.addPostHandler("/test", 0, new IPostHandler() {
+			@Override
+			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				response.getWriter().print("" + rawPost.length);
+				stopLatch.countDown();
+			}});
+		server.start();
+		
+		byte[] raw = new byte[] { 1,2,3 };
+		byte[] data = RestHelpers.postBinary("http://localhost:8080/test", raw);
+		// We expect it to write "3", since there are 3 bytes.
+		Assert.assertArrayEquals("3".getBytes(), data);
 		stopLatch.await();
 		server.stop();
 	}

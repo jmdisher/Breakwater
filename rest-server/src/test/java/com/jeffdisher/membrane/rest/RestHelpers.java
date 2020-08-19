@@ -9,6 +9,8 @@ import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.util.List;
 import java.util.Map;
 
 
@@ -41,17 +43,10 @@ public class RestHelpers {
 		connection.setDoOutput(true);
 		connection.getOutputStream().write(toSend);
 		
-		InputStream stream = connection.getInputStream();
-		byte[] buffer = new byte[connection.getContentLength()];
-		int didRead = 0;
-		while (didRead < buffer.length) {
-			int size = stream.read(buffer, didRead, buffer.length - didRead);
-			didRead += size;
-		}
-		return buffer;
+		return _readResponse(connection);
 	}
 
-	public static byte[] post(String url, Map<String, byte[]> toSend) throws MalformedURLException, IOException {
+	public static byte[] postParts(String url, StringMultiMap<byte[]> toSend) throws MalformedURLException, IOException {
 		HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
 		connection.setRequestMethod("POST");
 		connection.setDoOutput(true);
@@ -60,33 +55,65 @@ public class RestHelpers {
 		connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 		OutputStream outputStream = connection.getOutputStream();
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream));
-		for (Map.Entry<String, byte[]> entry : toSend.entrySet()) {
-			_addPart(outputStream, writer, boundary, entry.getKey(), entry.getValue());
+		for (Map.Entry<String, List<byte[]>> entry : toSend.entrySet()) {
+			String key = entry.getKey();
+			for (byte[] value : entry.getValue()) {
+				_addPart(outputStream, writer, boundary, key, value);
+			}
 		}
 		writer.append("--" + boundary + "--").append("\r\n");
 		writer.close();
-		InputStream stream = connection.getInputStream();
-		byte[] buffer = new byte[connection.getContentLength()];
-		int didRead = 0;
-		while (didRead < buffer.length) {
-			int size = stream.read(buffer, didRead, buffer.length - didRead);
-			didRead += size;
+		return _readResponse(connection);
+	}
+
+	public static byte[] postForm(String url, StringMultiMap<String> toSend) throws MalformedURLException, IOException {
+		// Assemble the form.
+		boolean appendAmpersand = false;
+		StringBuilder builder = new StringBuilder();
+		for (Map.Entry<String, List<String>> entry : toSend.entrySet()) {
+			String key = entry.getKey();
+			for (String value : entry.getValue()) {
+				if (appendAmpersand) {
+					builder.append("&");
+				}
+				appendAmpersand = true;
+				builder.append(URLEncoder.encode(key, "UTF-8") + "=" + URLEncoder.encode(value, "UTF-8"));
+			}
 		}
-		return buffer;
+		String serializedForm = builder.toString();
+		
+		// Write the form.
+		HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
+		connection.setRequestMethod("POST");
+		connection.setDoOutput(true);
+		connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+		connection.setRequestProperty("Content-Length", Integer.toString(serializedForm.length()));
+		OutputStream outputStream = connection.getOutputStream();
+		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream));
+		writer.write(serializedForm);
+		writer.close();
+		
+		return _readResponse(connection);
+	}
+
+	public static byte[] postBinary(String url, byte[] raw) throws MalformedURLException, IOException {
+		HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
+		connection.setRequestMethod("POST");
+		connection.setDoOutput(true);
+		connection.setRequestProperty("Content-Type", "application/octet-stream");
+		connection.setRequestProperty("Content-Length", Integer.toString(raw.length));
+		OutputStream outputStream = connection.getOutputStream();
+		outputStream.write(raw);
+		outputStream.close();
+		
+		return _readResponse(connection);
 	}
 
 	public static byte[] delete(String url) throws MalformedURLException, IOException {
 		HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
 		connection.setRequestMethod("DELETE");
 		
-		InputStream stream = connection.getInputStream();
-		byte[] buffer = new byte[connection.getContentLength()];
-		int didRead = 0;
-		while (didRead < buffer.length) {
-			int size = stream.read(buffer, didRead, buffer.length - didRead);
-			didRead += size;
-		}
-		return buffer;
+		return _readResponse(connection);
 	}
 
 
@@ -101,5 +128,17 @@ public class RestHelpers {
 		outputStream.write(value);
 		outputStream.flush();
 		writer.append(lineFeed);
+	}
+
+	private static byte[] _readResponse(HttpURLConnection connection) throws IOException {
+		// Read the response.
+		InputStream stream = connection.getInputStream();
+		byte[] buffer = new byte[connection.getContentLength()];
+		int didRead = 0;
+		while (didRead < buffer.length) {
+			int size = stream.read(buffer, didRead, buffer.length - didRead);
+			didRead += size;
+		}
+		return buffer;
 	}
 }
