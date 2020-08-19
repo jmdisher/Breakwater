@@ -18,6 +18,7 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.AbstractHandler;
+import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.util.MultiMap;
 import org.eclipse.jetty.util.UrlEncoded;
 
@@ -41,7 +42,10 @@ public class RestServer {
 		ServerConnector connector = new ServerConnector(_server);
 		connector.setPort(port);
 		_server.setConnectors(new ServerConnector[] { connector });
-		_server.setHandler(_entryPoint);
+		// Hard to find this missing step in session startup:  https://www.programcreek.com/java-api-examples/index.php?api=org.eclipse.jetty.server.session.SessionHandler
+		SessionHandler sessionHandler = new SessionHandler();
+		sessionHandler.setHandler(_entryPoint);
+		_server.setHandler(sessionHandler);
 		_deleteHandlers = new ArrayList<>();
 		_getHandlers = new ArrayList<>();
 		_postHandlers = new ArrayList<>();
@@ -100,7 +104,7 @@ public class RestServer {
 				for (HandlerTuple<IDeleteHandler> tuple : _deleteHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables);
+						tuple.handler.handle(request, response, variables);
 						baseRequest.setHandled(true);
 						break;
 					}
@@ -109,7 +113,7 @@ public class RestServer {
 				for (HandlerTuple<IGetHandler> tuple : _getHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables);
+						tuple.handler.handle(request, response, variables);
 						baseRequest.setHandled(true);
 						break;
 					}
@@ -182,7 +186,7 @@ public class RestServer {
 							raw = new byte[validSize];
 							System.arraycopy(holder.toByteArray(), 0, raw, 0, validSize);
 						}
-						tuple.handler.handle(response, variables, form, parts, raw);
+						tuple.handler.handle(request, response, variables, form, parts, raw);
 						baseRequest.setHandled(true);
 						break;
 					}
@@ -191,7 +195,7 @@ public class RestServer {
 				for (HandlerTuple<IPutHandler> tuple : _putHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
-						tuple.handler.handle(response, variables, baseRequest.getInputStream());
+						tuple.handler.handle(request, response, variables, baseRequest.getInputStream());
 						baseRequest.setHandled(true);
 						break;
 					}

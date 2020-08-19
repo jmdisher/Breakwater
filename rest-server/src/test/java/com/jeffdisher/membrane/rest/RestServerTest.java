@@ -6,8 +6,14 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.http.HttpMethod;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -19,7 +25,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -37,7 +43,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -54,13 +60,13 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
 				server.addGetHandler("/test2", 1, new IGetHandler() {
 					@Override
-					public void handle(HttpServletResponse response, String[] variables) throws IOException {
+					public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
 						response.setContentType("text/plain;charset=utf-8");
 						response.setStatus(HttpServletResponse.SC_OK);
 						response.getWriter().print(variables[0]);
@@ -83,7 +89,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addPutHandler("/test", 0, new IPutHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
 				response.setContentType("application/octet-stream");
 				response.setStatus(HttpServletResponse.SC_OK);
 				OutputStream stream = response.getOutputStream();
@@ -109,7 +115,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + multiPart.valueCount());
@@ -133,7 +139,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addDeleteHandler("/test", 0, new IDeleteHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] pathVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("DELETE/test");
@@ -153,7 +159,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + multiPart.valueCount());
@@ -178,7 +184,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + formVariables.valueCount());
@@ -203,7 +209,7 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
-			public void handle(HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + rawPost.length);
@@ -217,5 +223,96 @@ public class RestServerTest {
 		Assert.assertArrayEquals("3".getBytes(), data);
 		stopLatch.await();
 		server.stop();
+	}
+
+	@Test
+	public void testSessionState() throws Throwable {
+		RestServer server = new RestServer(8080);
+		HttpClient httpClient = new HttpClient();
+		server.addPostHandler("/start", 0, new IPostHandler() {
+			@Override
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				if (rawPost.length > 0) {
+					response.getWriter().print(new String(rawPost, StandardCharsets.UTF_8));
+					request.getSession(true).setAttribute("NAME", new String(rawPost, StandardCharsets.UTF_8));
+				} else {
+					request.getSession(true).invalidate();
+				}
+			}});
+		server.addGetHandler("/get", 0, new IGetHandler() {
+			@Override
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+				HttpSession session = request.getSession(false);
+				if (null != session) {
+					response.setContentType("text/plain;charset=utf-8");
+					response.setStatus(HttpServletResponse.SC_OK);
+					response.getWriter().print(session.getAttribute("NAME"));
+				} else {
+					response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				}
+			}
+		});
+		server.addPutHandler("/put", 0, new IPutHandler() {
+			@Override
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, InputStream inputStream) throws IOException {
+				HttpSession session = request.getSession(false);
+				if (null != session) {
+					response.setContentType("text/plain;charset=utf-8");
+					response.setStatus(HttpServletResponse.SC_OK);
+					response.getWriter().print(session.getAttribute("NAME"));
+				} else {
+					response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				}
+			}
+		});
+		server.addDeleteHandler("/delete", 0, new IDeleteHandler() {
+			@Override
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+				HttpSession session = request.getSession(false);
+				if (null != session) {
+					response.setContentType("text/plain;charset=utf-8");
+					response.setStatus(HttpServletResponse.SC_OK);
+					response.getWriter().print(session.getAttribute("NAME"));
+				} else {
+					response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				}
+			}
+		});
+		
+		server.start();
+		httpClient.start();
+		
+		String loggedInUserName = "USER_NAME";
+		String content = _sendRequest(httpClient, HttpMethod.POST, "http://localhost:8080/start", loggedInUserName);
+		Assert.assertEquals(loggedInUserName, content);
+		
+		content = _sendRequest(httpClient, HttpMethod.GET, "http://localhost:8080/get", loggedInUserName);
+		Assert.assertEquals(loggedInUserName, content);
+		
+		content = _sendRequest(httpClient, HttpMethod.PUT, "http://localhost:8080/put", loggedInUserName);
+		Assert.assertEquals(loggedInUserName, content);
+		
+		content = _sendRequest(httpClient, HttpMethod.DELETE, "http://localhost:8080/delete", loggedInUserName);
+		Assert.assertEquals(loggedInUserName, content);
+		
+		content = _sendRequest(httpClient, HttpMethod.POST, "http://localhost:8080/start", "");
+		Assert.assertEquals("", content);
+		
+		content = _sendRequest(httpClient, HttpMethod.GET, "http://localhost:8080/get", loggedInUserName);
+		Assert.assertEquals("", content);
+
+		httpClient.stop();
+		server.stop();
+	}
+
+
+	private String _sendRequest(HttpClient httpClient, HttpMethod method, String url, String loggedInUserName) throws Throwable {
+		Request request = httpClient.newRequest(url);
+		request.method(method);
+		request.content(new StringContentProvider(loggedInUserName));
+		String content = new String(request.send().getContent(), StandardCharsets.UTF_8);
+		return content;
 	}
 }
