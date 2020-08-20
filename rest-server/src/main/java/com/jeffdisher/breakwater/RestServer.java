@@ -31,7 +31,7 @@ import org.eclipse.jetty.websocket.servlet.ServletUpgradeResponse;
 import org.eclipse.jetty.websocket.servlet.WebSocketCreator;
 import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 
-import com.jeffdisher.laminar.utils.Assert;
+import com.jeffdisher.breakwater.utilities.Assert;
 
 
 public class RestServer {
