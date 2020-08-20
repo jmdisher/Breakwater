@@ -1,5 +1,6 @@
 package com.jeffdisher.membrane.rest;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,15 +15,17 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.StringContentProvider;
 import org.eclipse.jetty.http.HttpMethod;
+import org.eclipse.jetty.util.resource.PathResource;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 
 public class RestServerTest {
 	@Test
 	public void testBasicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -40,7 +43,7 @@ public class RestServerTest {
 
 	@Test
 	public void testNotFound() throws Throwable {
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -57,7 +60,7 @@ public class RestServerTest {
 	@Test
 	public void testDynamicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -86,7 +89,7 @@ public class RestServerTest {
 	@Test
 	public void testPutBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addPutHandler("/test", 0, new IPutHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
@@ -112,7 +115,7 @@ public class RestServerTest {
 	@Test
 	public void testPostParts() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
@@ -136,7 +139,7 @@ public class RestServerTest {
 	@Test
 	public void testDelete() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addDeleteHandler("/test", 0, new IDeleteHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
@@ -156,7 +159,7 @@ public class RestServerTest {
 	@Test
 	public void testPostPartsDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
@@ -181,7 +184,7 @@ public class RestServerTest {
 	@Test
 	public void testPostFormDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
@@ -206,7 +209,7 @@ public class RestServerTest {
 	@Test
 	public void testPostRawBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		server.addPostHandler("/test", 0, new IPostHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
@@ -227,7 +230,7 @@ public class RestServerTest {
 
 	@Test
 	public void testSessionState() throws Throwable {
-		RestServer server = new RestServer(8080);
+		RestServer server = new RestServer(8080, null);
 		HttpClient httpClient = new HttpClient();
 		server.addPostHandler("/start", 0, new IPostHandler() {
 			@Override
@@ -304,6 +307,21 @@ public class RestServerTest {
 		Assert.assertEquals("", content);
 
 		httpClient.stop();
+		server.stop();
+	}
+
+	@Test
+	public void testStaticContent() throws Throwable {
+		TemporaryFolder folder = new TemporaryFolder();
+		folder.create();
+		File dir = folder.newFolder();
+		new File(dir, "temp.txt").createNewFile();
+		RestServer server = new RestServer(8080, new PathResource(dir));
+		server.start();
+		byte[] found = RestHelpers.get("http://localhost:8080/temp.txt");
+		byte[] missing = RestHelpers.get("http://localhost:8080/temp2.txt");
+		Assert.assertArrayEquals(new byte[0], found);
+		Assert.assertArrayEquals(null, missing);
 		server.stop();
 	}
 
