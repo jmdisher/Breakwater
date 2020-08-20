@@ -119,8 +119,8 @@ public class RestServer {
 			String method = baseRequest.getMethod();
 			if ("DELETE".equals(method)) {
 				for (HandlerTuple<IDeleteHandler> tuple : _deleteHandlers) {
-					if (tuple.canHandle(method, target)) {
-						String[] variables = tuple.parseVariables(target);
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
 						tuple.handler.handle(request, response, variables);
 						baseRequest.setHandled(true);
 						break;
@@ -128,8 +128,8 @@ public class RestServer {
 				}
 			} else if ("GET".equals(method)) {
 				for (HandlerTuple<IGetHandler> tuple : _getHandlers) {
-					if (tuple.canHandle(method, target)) {
-						String[] variables = tuple.parseVariables(target);
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
 						tuple.handler.handle(request, response, variables);
 						baseRequest.setHandled(true);
 						break;
@@ -137,8 +137,8 @@ public class RestServer {
 				}
 			} else if ("POST".equals(method)) {
 				for (HandlerTuple<IPostHandler> tuple : _postHandlers) {
-					if (tuple.canHandle(method, target)) {
-						String[] variables = tuple.parseVariables(target);
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
 						StringMultiMap<byte[]> parts = null;
 						StringMultiMap<String> form = null;
 						byte[] raw = null;
@@ -210,8 +210,8 @@ public class RestServer {
 				}
 			} else if ("PUT".equals(method)) {
 				for (HandlerTuple<IPutHandler> tuple : _putHandlers) {
-					if (tuple.canHandle(method, target)) {
-						String[] variables = tuple.parseVariables(target);
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
 						tuple.handler.handle(request, response, variables, baseRequest.getInputStream());
 						baseRequest.setHandled(true);
 						break;
@@ -223,17 +223,26 @@ public class RestServer {
 
 
 	private static class HandlerTuple<T> {
-		private final String _pathPrefix;
-		private final int _variableCount;
+		public final PathMatcher matcher;
 		public final T handler;
 		
 		public HandlerTuple(String pathPrefix, int variableCount, T handler) {
-			_pathPrefix = pathPrefix;
-			_variableCount = variableCount;
+			this.matcher = new PathMatcher(pathPrefix, variableCount);
 			this.handler = handler;
 		}
+	}
+
+
+	private static class PathMatcher {
+		private final String _pathPrefix;
+		private final int _variableCount;
 		
-		public boolean canHandle(String method, String target) {
+		public PathMatcher(String pathPrefix, int variableCount) {
+			_pathPrefix = pathPrefix;
+			_variableCount = variableCount;
+		}
+		
+		public boolean canHandle(String target) {
 			return target.startsWith(_pathPrefix) && ((target.substring(_pathPrefix.length()).split("/").length - 1) == _variableCount);
 		}
 		
