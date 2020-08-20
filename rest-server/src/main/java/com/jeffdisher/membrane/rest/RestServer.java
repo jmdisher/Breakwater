@@ -26,10 +26,10 @@ public class RestServer {
 
 	private final EntryPoint _entryPoint;
 	private final Server _server;
-	private List<HandlerTuple<IDeleteHandler>> _deleteHandlers;
-	private List<HandlerTuple<IGetHandler>> _getHandlers;
-	private List<HandlerTuple<IPostHandler>> _postHandlers;
-	private List<HandlerTuple<IPutHandler>> _putHandlers;
+	private final List<HandlerTuple<IDeleteHandler>> _deleteHandlers;
+	private final List<HandlerTuple<IGetHandler>> _getHandlers;
+	private final List<HandlerTuple<IPostHandler>> _postHandlers;
+	private final List<HandlerTuple<IPutHandler>> _putHandlers;
 
 	public RestServer(int port) {
 		_entryPoint = new EntryPoint();
@@ -93,37 +93,25 @@ public class RestServer {
 		public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 			String method = baseRequest.getMethod();
 			if ("DELETE".equals(method)) {
-				// Remove the handlers in case we need to add more in processing.
-				List<HandlerTuple<IDeleteHandler>> handlersCopy = _deleteHandlers;
-				_deleteHandlers = new ArrayList<>();
-				
-				for (HandlerTuple<IDeleteHandler> tuple : handlersCopy) {
+				for (HandlerTuple<IDeleteHandler> tuple : _deleteHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
 						tuple.handler.handle(response, variables);
 						baseRequest.setHandled(true);
+						break;
 					}
 				}
-				_deleteHandlers.addAll(handlersCopy);
 			} else if ("GET".equals(method)) {
-				// Remove the handlers in case we need to add more in processing.
-				List<HandlerTuple<IGetHandler>> handlersCopy = _getHandlers;
-				_getHandlers = new ArrayList<>();
-				
-				for (HandlerTuple<IGetHandler> tuple : handlersCopy) {
+				for (HandlerTuple<IGetHandler> tuple : _getHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
 						tuple.handler.handle(response, variables);
 						baseRequest.setHandled(true);
+						break;
 					}
 				}
-				_getHandlers.addAll(handlersCopy);
 			} else if ("POST".equals(method)) {
-				// Remove the handlers in case we need to add more in processing.
-				List<HandlerTuple<IPostHandler>> handlersCopy = _postHandlers;
-				_postHandlers = new ArrayList<>();
-				
-				for (HandlerTuple<IPostHandler> tuple : handlersCopy) {
+				for (HandlerTuple<IPostHandler> tuple : _postHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
 						request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
@@ -144,22 +132,18 @@ public class RestServer {
 						}
 						tuple.handler.handle(response, variables, parts);
 						baseRequest.setHandled(true);
+						break;
 					}
 				}
-				_postHandlers.addAll(handlersCopy);
 			} else if ("PUT".equals(method)) {
-				// Remove the handlers in case we need to add more in processing.
-				List<HandlerTuple<IPutHandler>> handlersCopy = _putHandlers;
-				_putHandlers = new ArrayList<>();
-				
-				for (HandlerTuple<IPutHandler> tuple : handlersCopy) {
+				for (HandlerTuple<IPutHandler> tuple : _putHandlers) {
 					if (tuple.canHandle(method, target)) {
 						String[] variables = tuple.parseVariables(target);
 						tuple.handler.handle(response, variables, baseRequest.getInputStream());
 						baseRequest.setHandled(true);
+						break;
 					}
 				}
-				_putHandlers.addAll(handlersCopy);
 			}
 		}
 	}
