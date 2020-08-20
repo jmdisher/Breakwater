@@ -18,13 +18,18 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.server.session.SessionHandler;
+import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.util.MultiMap;
 import org.eclipse.jetty.util.UrlEncoded;
 import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.websocket.server.WebSocketHandler;
+import org.eclipse.jetty.websocket.servlet.ServletUpgradeRequest;
+import org.eclipse.jetty.websocket.servlet.ServletUpgradeResponse;
+import org.eclipse.jetty.websocket.servlet.WebSocketCreator;
+import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 
 import com.jeffdisher.laminar.utils.Assert;
 
@@ -39,6 +44,7 @@ public class RestServer {
 	private final List<HandlerTuple<IGetHandler>> _getHandlers;
 	private final List<HandlerTuple<IPostHandler>> _postHandlers;
 	private final List<HandlerTuple<IPutHandler>> _putHandlers;
+	private final List<WebSocketFactoryTuple> _webSocketFactories;
 
 	public RestServer(int port, Resource staticContentResource) {
 		_entryPoint = new EntryPoint();
@@ -53,6 +59,8 @@ public class RestServer {
 			staticResources = new ResourceHandler();
 			staticResources.setBaseResource(staticContentResource);
 		}
+		// We need to create a ServletContextHandler in order to check the request path in web socket connections but it doesn't appear to need any arguments.
+		ServletContextHandler context = new ServletContextHandler();
 		// Hard to find this missing step in session startup:  https://www.programcreek.com/java-api-examples/index.php?api=org.eclipse.jetty.server.session.SessionHandler
 		SessionHandler sessionHandler = new SessionHandler();
 		if (null != staticResources) {
@@ -62,11 +70,13 @@ public class RestServer {
 		} else {
 			sessionHandler.setHandler(_entryPoint);
 		}
-		_server.setHandler(sessionHandler);
+		context.setHandler(sessionHandler);
+		_server.setHandler(context);
 		_deleteHandlers = new ArrayList<>();
 		_getHandlers = new ArrayList<>();
 		_postHandlers = new ArrayList<>();
 		_putHandlers = new ArrayList<>();
+		_webSocketFactories = new ArrayList<>();
 	}
 
 	public void addDeleteHandler(String pathPrefix, int variableCount, IDeleteHandler handler) {
@@ -93,6 +103,12 @@ public class RestServer {
 		_putHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
 	}
 
+	public void addWebSocketFactory(String pathPrefix, int variableCount, boolean acceptText, boolean acceptBinary, IWebSocketFactory factory) {
+		Assert.assertTrue(!pathPrefix.endsWith("/"));
+		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
+		_webSocketFactories.add(0, new WebSocketFactoryTuple(pathPrefix, variableCount, acceptText, acceptBinary, factory));
+	}
+
 	public void start() {
 		try {
 			_server.start();
@@ -113,7 +129,7 @@ public class RestServer {
 	}
 
 
-	private class EntryPoint extends AbstractHandler {
+	private class EntryPoint extends WebSocketHandler {
 		@Override
 		public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 			String method = baseRequest.getMethod();
@@ -218,6 +234,38 @@ public class RestServer {
 					}
 				}
 			}
+			// If no handler was invoked, call the super (potentially a websocket).
+			if (!baseRequest.isHandled()) {
+				super.handle(target, baseRequest, request, response);
+			}
+		}
+		@Override
+		public void configure(WebSocketServletFactory factory) {
+			// Note:  This is called once during startup.
+			factory.getPolicy().setIdleTimeout(10_000L);
+			factory.setCreator(new WebSocketCreator() {
+				@Override
+				public Object createWebSocket(ServletUpgradeRequest req, ServletUpgradeResponse resp) {
+					Object socket = null;
+					String target = req.getRequestPath();
+					for (WebSocketFactoryTuple tuple : _webSocketFactories) {
+						if (tuple.matcher.canHandle(target)) {
+							// We know that we can handle this path so select the protocols.
+							for (String subProtocol : req.getSubProtocols()) {
+								if (tuple.acceptBinary && "binary".equals(subProtocol)) {
+									resp.setAcceptedSubProtocol(subProtocol);
+								} else if (tuple.acceptText && "text".equals(subProtocol)) {
+									resp.setAcceptedSubProtocol(subProtocol);
+								}
+							}
+							String[] variables = tuple.matcher.parseVariables(target);
+							socket = tuple.factory.create(variables);
+							break;
+						}
+					}
+					return socket;
+				}
+			});
 		}
 	}
 
@@ -229,6 +277,21 @@ public class RestServer {
 		public HandlerTuple(String pathPrefix, int variableCount, T handler) {
 			this.matcher = new PathMatcher(pathPrefix, variableCount);
 			this.handler = handler;
+		}
+	}
+
+
+	private static class WebSocketFactoryTuple {
+		public final PathMatcher matcher;
+		public final boolean acceptText;
+		public final boolean acceptBinary;
+		public final IWebSocketFactory factory;
+		
+		public WebSocketFactoryTuple(String pathPrefix, int variableCount, boolean acceptText, boolean acceptBinary, IWebSocketFactory factory) {
+			this.matcher = new PathMatcher(pathPrefix, variableCount);
+			this.acceptText = acceptText;
+			this.acceptBinary = acceptBinary;
+			this.factory = factory;
 		}
 	}
 

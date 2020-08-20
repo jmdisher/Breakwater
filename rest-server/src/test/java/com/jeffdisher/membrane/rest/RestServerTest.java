@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 
@@ -16,6 +18,10 @@ import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.StringContentProvider;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.util.resource.PathResource;
+import org.eclipse.jetty.websocket.api.RemoteEndpoint;
+import org.eclipse.jetty.websocket.api.Session;
+import org.eclipse.jetty.websocket.api.WebSocketListener;
+import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -325,6 +331,67 @@ public class RestServerTest {
 		server.stop();
 	}
 
+	@Test
+	public void testWebSocket() throws Throwable {
+		String testString = "test";
+		Throwable[] failureReference = new Throwable[1];
+		CountDownLatch latch = new CountDownLatch(2);
+		RestServer server = new RestServer(8080, null);
+		server.addWebSocketFactory("/ws", 1, true, true, (String[] variables) -> new Listener(variables, latch, failureReference));
+		server.start();
+		
+		WebSocketClient client = new WebSocketClient();
+		client.start();
+		client.connect(new WebSocketListener() {
+			private RemoteEndpoint _endpoint;
+			private String _stringReceived;
+			private int _byteCountReceived;
+			@Override
+			public void onWebSocketClose(int statusCode, String reason) {
+			}
+			@Override
+			public void onWebSocketConnect(Session session) {
+				_endpoint = session.getRemote();
+			}
+			@Override
+			public void onWebSocketError(Throwable cause) {
+				cause.printStackTrace();
+			}
+			@Override
+			public void onWebSocketBinary(byte[] payload, int offset, int len) {
+				// We expect that the binary will be the name.
+				Assert.assertEquals(testString, new String(payload, offset, len, StandardCharsets.UTF_8));
+				// Send our echo once we have both messages.
+				_byteCountReceived = len;
+				if (null != _stringReceived) {
+					_send();
+				}
+			}
+			@Override
+			public void onWebSocketText(String message) {
+				// We expect that the message will be the name.
+				Assert.assertEquals(testString, message);
+				_stringReceived = message;
+				if (_byteCountReceived > 0) {
+					_send();
+				}
+			}
+			private void _send() {
+				String text = _stringReceived + _byteCountReceived;
+				try {
+					_endpoint.sendString(text);
+					_endpoint.sendBytes(ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
+				} catch (IOException e) {
+					failureReference[0] = e;
+				}
+			}
+		}, new URI("ws://localhost:8080/ws/" + testString));
+		latch.await();
+		client.stop();
+		server.stop();
+		Assert.assertNull(failureReference[0]);
+	}
+
 
 	private String _sendRequest(HttpClient httpClient, HttpMethod method, String url, String loggedInUserName) throws Throwable {
 		Request request = httpClient.newRequest(url);
@@ -332,5 +399,45 @@ public class RestServerTest {
 		request.content(new StringContentProvider(loggedInUserName));
 		String content = new String(request.send().getContent(), StandardCharsets.UTF_8);
 		return content;
+	}
+
+
+	public static class Listener implements WebSocketListener {
+		private final String _name;
+		private final CountDownLatch _latch;
+		private final Throwable[] _failureReference;
+		private RemoteEndpoint _endpoint;
+		
+		public Listener(String[] variables, CountDownLatch latch, Throwable[] failureReference) {
+			_name = variables[0];
+			_latch = latch;
+			_failureReference = failureReference;
+		}
+		@Override
+		public void onWebSocketClose(int statusCode, String reason) {
+		}
+		@Override
+		public void onWebSocketConnect(Session session) {
+			_endpoint = session.getRemote();
+			try {
+				_endpoint.sendString(_name);
+				_endpoint.sendBytes(ByteBuffer.wrap(_name.getBytes(StandardCharsets.UTF_8)));
+			} catch (IOException e) {
+				_failureReference[0] = e;
+			}
+		}
+		@Override
+		public void onWebSocketError(Throwable cause) {
+		}
+		@Override
+		public void onWebSocketBinary(byte[] payload, int offset, int len) {
+			Assert.assertEquals(_name.length() + 1, len);
+			_latch.countDown();
+		}
+		@Override
+		public void onWebSocketText(String message) {
+			Assert.assertEquals(_name + _name.length(), message);
+			_latch.countDown();
+		}
 	}
 }
