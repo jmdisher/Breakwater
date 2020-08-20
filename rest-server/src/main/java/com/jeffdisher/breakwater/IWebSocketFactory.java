@@ -1,4 +1,4 @@
-package com.jeffdisher.membrane.rest;
+package com.jeffdisher.breakwater;
 
 import org.eclipse.jetty.websocket.api.WebSocketListener;
 
