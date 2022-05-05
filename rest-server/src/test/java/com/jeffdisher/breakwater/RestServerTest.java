@@ -15,7 +15,7 @@ import javax.servlet.http.HttpSession;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.Request;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.util.StringRequestContent;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.websocket.api.RemoteEndpoint;
@@ -398,7 +398,7 @@ public class RestServerTest {
 	private String _sendRequest(HttpClient httpClient, HttpMethod method, String url, String loggedInUserName) throws Throwable {
 		Request request = httpClient.newRequest(url);
 		request.method(method);
-		request.content(new StringContentProvider(loggedInUserName));
+		request.body(new StringRequestContent(loggedInUserName));
 		String content = new String(request.send().getContent(), StandardCharsets.UTF_8);
 		return content;
 	}

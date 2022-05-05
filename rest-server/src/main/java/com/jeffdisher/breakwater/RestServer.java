@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -14,22 +15,22 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 
-import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.MultiMap;
 import org.eclipse.jetty.util.UrlEncoded;
 import org.eclipse.jetty.util.resource.Resource;
-import org.eclipse.jetty.websocket.server.WebSocketHandler;
-import org.eclipse.jetty.websocket.servlet.ServletUpgradeRequest;
-import org.eclipse.jetty.websocket.servlet.ServletUpgradeResponse;
-import org.eclipse.jetty.websocket.servlet.WebSocketCreator;
-import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
+import org.eclipse.jetty.websocket.server.JettyServerUpgradeRequest;
+import org.eclipse.jetty.websocket.server.JettyServerUpgradeResponse;
+import org.eclipse.jetty.websocket.server.JettyWebSocketCreator;
+import org.eclipse.jetty.websocket.server.JettyWebSocketServlet;
+import org.eclipse.jetty.websocket.server.JettyWebSocketServletFactory;
+import org.eclipse.jetty.websocket.server.config.JettyWebSocketServletContainerInitializer;
 
 import com.jeffdisher.breakwater.utilities.Assert;
 
@@ -59,19 +60,23 @@ public class RestServer {
 			staticResources = new ResourceHandler();
 			staticResources.setBaseResource(staticContentResource);
 		}
-		// We need to create a ServletContextHandler in order to check the request path in web socket connections but it doesn't appear to need any arguments.
-		ServletContextHandler context = new ServletContextHandler();
-		// Hard to find this missing step in session startup:  https://www.programcreek.com/java-api-examples/index.php?api=org.eclipse.jetty.server.session.SessionHandler
-		SessionHandler sessionHandler = new SessionHandler();
+		
+		// We need to create a ServletContextHandler in order to check the request path in web socket connections and we will request that it enables session management.
+		ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
+		context.addServlet(new ServletHolder(_entryPoint), "/*");
+		
+		// We also want to enable WebSockets.
+		JettyWebSocketServletContainerInitializer.configure(context, null);
+		
 		if (null != staticResources) {
 			HandlerList list = new HandlerList();
-			list.setHandlers(new Handler[] { staticResources, _entryPoint });
-			sessionHandler.setHandler(list);
+			list.addHandler(staticResources);
+			list.addHandler(context);
+			_server.setHandler(list);
 		} else {
-			sessionHandler.setHandler(_entryPoint);
+			_server.setHandler(context);
 		}
-		context.setHandler(sessionHandler);
-		_server.setHandler(context);
+		
 		_deleteHandlers = new ArrayList<>();
 		_getHandlers = new ArrayList<>();
 		_postHandlers = new ArrayList<>();
@@ -129,47 +134,62 @@ public class RestServer {
 	}
 
 
-	private class EntryPoint extends WebSocketHandler {
+	private class EntryPoint extends JettyWebSocketServlet {
+		private static final long serialVersionUID = 1L;
+		
 		@Override
-		public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-			String method = baseRequest.getMethod();
-			if ("DELETE".equals(method)) {
-				boolean handled = _handleDelete(target, request, response);
-				if (handled)
-				{
-					baseRequest.setHandled(true);
-				}
-			} else if ("GET".equals(method)) {
-				boolean handled = _handleGet(target, request, response);
-				if (handled)
-				{
-					baseRequest.setHandled(true);
-				}
-			} else if ("POST".equals(method)) {
-				boolean handled = _handlePost(target, request, response);
-				if (handled)
-				{
-					baseRequest.setHandled(true);
-				}
-			} else if ("PUT".equals(method)) {
-				boolean handled = _handlePut(target, request, response);
-				if (handled)
-				{
-					baseRequest.setHandled(true);
-				}
-			}
-			// If no handler was invoked, call the super (potentially a websocket).
-			if (!baseRequest.isHandled()) {
-				super.handle(target, baseRequest, request, response);
+		protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+		{
+			String target = request.getPathInfo();
+			boolean found = _handleGet(target, request, response);
+			if (!found)
+			{
+				// We will use 404 since calling super gives 405, which isn't generally what we want (since GET is clearly 404).
+				response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			}
 		}
 		@Override
-		public void configure(WebSocketServletFactory factory) {
+		protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+		{
+			String target = request.getPathInfo();
+			boolean found = _handlePost(target, request, response);
+			if (!found)
+			{
+				// We will use 404 since calling super gives 405, which isn't generally what we want (since GET is clearly 404).
+				response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			}
+		}
+		@Override
+		protected void doPut(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+		{
+			String target = request.getPathInfo();
+			boolean found = _handlePut(target, request, response);
+			if (!found)
+			{
+				// We will use 404 since calling super gives 405, which isn't generally what we want (since GET is clearly 404).
+				response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			}
+		}
+		@Override
+		protected void doDelete(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
+		{
+			String target = request.getPathInfo();
+			boolean found = _handleDelete(target, request, response);
+			if (!found)
+			{
+				// We will use 404 since calling super gives 405, which isn't generally what we want (since GET is clearly 404).
+				response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			}
+		}
+		@Override
+		protected void configure(JettyWebSocketServletFactory factory)
+		{
 			// Note:  This is called once during startup.
-			factory.getPolicy().setIdleTimeout(10_000L);
-			factory.setCreator(new WebSocketCreator() {
+			factory.setIdleTimeout(Duration.ofMillis(10_000L));
+			factory.setCreator(new JettyWebSocketCreator() {
 				@Override
-				public Object createWebSocket(ServletUpgradeRequest req, ServletUpgradeResponse resp) {
+				public Object createWebSocket(JettyServerUpgradeRequest req, JettyServerUpgradeResponse resp)
+				{
 					return _handleWebSocketUpgrade(req, resp);
 				}
 			});
@@ -204,7 +224,7 @@ public class RestServer {
 					
 					if (isMultiPart) {
 						parts = new StringMultiMap<>();
-						request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
+						request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
 						for (Part part : request.getParts()) {
 							String name = part.getName();
 							Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
@@ -291,7 +311,7 @@ public class RestServer {
 			}
 			return found;
 		}
-		private Object _handleWebSocketUpgrade(ServletUpgradeRequest req, ServletUpgradeResponse resp)
+		private Object _handleWebSocketUpgrade(JettyServerUpgradeRequest req, JettyServerUpgradeResponse resp)
 		{
 			Object socket = null;
 			String target = req.getRequestPath();
