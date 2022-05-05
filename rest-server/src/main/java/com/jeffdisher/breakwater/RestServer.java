@@ -134,104 +134,28 @@ public class RestServer {
 		public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
 			String method = baseRequest.getMethod();
 			if ("DELETE".equals(method)) {
-				for (HandlerTuple<IDeleteHandler> tuple : _deleteHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						tuple.handler.handle(request, response, variables);
-						baseRequest.setHandled(true);
-						break;
-					}
+				boolean handled = _handleDelete(target, request, response);
+				if (handled)
+				{
+					baseRequest.setHandled(true);
 				}
 			} else if ("GET".equals(method)) {
-				for (HandlerTuple<IGetHandler> tuple : _getHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						tuple.handler.handle(request, response, variables);
-						baseRequest.setHandled(true);
-						break;
-					}
+				boolean handled = _handleGet(target, request, response);
+				if (handled)
+				{
+					baseRequest.setHandled(true);
 				}
 			} else if ("POST".equals(method)) {
-				for (HandlerTuple<IPostHandler> tuple : _postHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						StringMultiMap<byte[]> parts = null;
-						StringMultiMap<String> form = null;
-						byte[] raw = null;
-						// This line may include things like boundary, etc, so it can't be strict equality.
-						String contentType = request.getContentType();
-						boolean isMultiPart = (null != contentType) && contentType.startsWith("multipart/form-data");
-						boolean isFormEncoded = (null != contentType) && contentType.startsWith("application/x-www-form-urlencoded");
-						
-						if (isMultiPart) {
-							parts = new StringMultiMap<>();
-							request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
-							for (Part part : request.getParts()) {
-								String name = part.getName();
-								Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
-								byte[] data = new byte[(int)part.getSize()];
-								if (data.length > 0) {
-									InputStream stream = part.getInputStream();
-									int didRead = stream.read(data);
-									while (didRead < data.length) {
-										didRead += stream.read(data, didRead, data.length - didRead);
-									}
-								}
-								parts.append(name, data);
-								part.delete();
-								if (parts.valueCount() > MAX_VARIABLES) {
-									// We will only read the first MAX_VARIABLES, much like the form-encoded.
-									break;
-								}
-							}
-						} else if (isFormEncoded) {
-							form = new StringMultiMap<>();
-							MultiMap<String> parsed = new MultiMap<String>();
-							UrlEncoded.decodeTo(request.getInputStream(), parsed, StandardCharsets.UTF_8, MAX_POST_SIZE, MAX_VARIABLES);
-							for (Map.Entry<String, List<String>> entry : parsed.entrySet()) {
-								String key = entry.getKey();
-								for (String value : entry.getValue()) {
-									form.append(key, value);
-								}
-							}
-						} else {
-							// Note that we can't rely on the content length since the client may not send it so only allow what we would normally allow for a single variable entry.
-							ByteArrayOutputStream holder = new ByteArrayOutputStream();
-							InputStream stream = request.getInputStream();
-							boolean keepReading = true;
-							byte[] temp = new byte[1024];
-							int bytesRead = 0;
-							while (keepReading) {
-								int didRead = stream.read(temp);
-								if (didRead > 0) {
-									holder.write(temp, 0, didRead);
-									bytesRead += didRead;
-									if (bytesRead >= MAX_POST_SIZE) {
-										keepReading = false;
-									}
-								} else {
-									keepReading = false;
-								}
-							}
-							int validSize = (bytesRead > MAX_POST_SIZE)
-									? MAX_POST_SIZE
-									: bytesRead;
-							raw = new byte[validSize];
-							System.arraycopy(holder.toByteArray(), 0, raw, 0, validSize);
-						}
-						tuple.handler.handle(request, response, variables, form, parts, raw);
-						baseRequest.setHandled(true);
-						break;
-					}
+				boolean handled = _handlePost(target, request, response);
+				if (handled)
+				{
+					baseRequest.setHandled(true);
 				}
 			} else if ("PUT".equals(method)) {
-				for (HandlerTuple<IPutHandler> tuple : _putHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						tuple.handler.handle(request, response, variables, baseRequest.getInputStream());
-						baseRequest.setHandled(true);
-						break;
-					}
+				boolean handled = _handlePut(target, request, response);
+				if (handled)
+				{
+					baseRequest.setHandled(true);
 				}
 			}
 			// If no handler was invoked, call the super (potentially a websocket).
@@ -246,26 +170,147 @@ public class RestServer {
 			factory.setCreator(new WebSocketCreator() {
 				@Override
 				public Object createWebSocket(ServletUpgradeRequest req, ServletUpgradeResponse resp) {
-					Object socket = null;
-					String target = req.getRequestPath();
-					for (WebSocketFactoryTuple tuple : _webSocketFactories) {
-						if (tuple.matcher.canHandle(target)) {
-							// We know that we can handle this path so select the protocols.
-							for (String subProtocol : req.getSubProtocols()) {
-								if (tuple.acceptBinary && "binary".equals(subProtocol)) {
-									resp.setAcceptedSubProtocol(subProtocol);
-								} else if (tuple.acceptText && "text".equals(subProtocol)) {
-									resp.setAcceptedSubProtocol(subProtocol);
-								}
-							}
-							String[] variables = tuple.matcher.parseVariables(target);
-							socket = tuple.factory.create(variables);
-							break;
-						}
-					}
-					return socket;
+					return _handleWebSocketUpgrade(req, resp);
 				}
 			});
+		}
+		
+		private boolean _handleGet(String target, HttpServletRequest request, HttpServletResponse response) throws IOException
+		{
+			boolean found = false;
+			for (HandlerTuple<IGetHandler> tuple : _getHandlers) {
+				if (tuple.matcher.canHandle(target)) {
+					String[] variables = tuple.matcher.parseVariables(target);
+					tuple.handler.handle(request, response, variables);
+					found = true;
+					break;
+				}
+			}
+			return found;
+		}
+		private boolean _handlePost(String target, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
+		{
+			boolean found = false;
+			for (HandlerTuple<IPostHandler> tuple : _postHandlers) {
+				if (tuple.matcher.canHandle(target)) {
+					String[] variables = tuple.matcher.parseVariables(target);
+					StringMultiMap<byte[]> parts = null;
+					StringMultiMap<String> form = null;
+					byte[] raw = null;
+					// This line may include things like boundary, etc, so it can't be strict equality.
+					String contentType = request.getContentType();
+					boolean isMultiPart = (null != contentType) && contentType.startsWith("multipart/form-data");
+					boolean isFormEncoded = (null != contentType) && contentType.startsWith("application/x-www-form-urlencoded");
+					
+					if (isMultiPart) {
+						parts = new StringMultiMap<>();
+						request.setAttribute(Request.MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
+						for (Part part : request.getParts()) {
+							String name = part.getName();
+							Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
+							byte[] data = new byte[(int)part.getSize()];
+							if (data.length > 0) {
+								InputStream stream = part.getInputStream();
+								int didRead = stream.read(data);
+								while (didRead < data.length) {
+									didRead += stream.read(data, didRead, data.length - didRead);
+								}
+							}
+							parts.append(name, data);
+							part.delete();
+							if (parts.valueCount() > MAX_VARIABLES) {
+								// We will only read the first MAX_VARIABLES, much like the form-encoded.
+								break;
+							}
+						}
+					} else if (isFormEncoded) {
+						form = new StringMultiMap<>();
+						MultiMap<String> parsed = new MultiMap<String>();
+						UrlEncoded.decodeTo(request.getInputStream(), parsed, StandardCharsets.UTF_8, MAX_POST_SIZE, MAX_VARIABLES);
+						for (Map.Entry<String, List<String>> entry : parsed.entrySet()) {
+							String key = entry.getKey();
+							for (String value : entry.getValue()) {
+								form.append(key, value);
+							}
+						}
+					} else {
+						// Note that we can't rely on the content length since the client may not send it so only allow what we would normally allow for a single variable entry.
+						ByteArrayOutputStream holder = new ByteArrayOutputStream();
+						InputStream stream = request.getInputStream();
+						boolean keepReading = true;
+						byte[] temp = new byte[1024];
+						int bytesRead = 0;
+						while (keepReading) {
+							int didRead = stream.read(temp);
+							if (didRead > 0) {
+								holder.write(temp, 0, didRead);
+								bytesRead += didRead;
+								if (bytesRead >= MAX_POST_SIZE) {
+									keepReading = false;
+								}
+							} else {
+								keepReading = false;
+							}
+						}
+						int validSize = (bytesRead > MAX_POST_SIZE)
+								? MAX_POST_SIZE
+								: bytesRead;
+						raw = new byte[validSize];
+						System.arraycopy(holder.toByteArray(), 0, raw, 0, validSize);
+					}
+					tuple.handler.handle(request, response, variables, form, parts, raw);
+					found = true;
+					break;
+				}
+			}
+			return found;
+		}
+		private boolean _handlePut(String target, HttpServletRequest request, HttpServletResponse response) throws IOException
+		{
+			boolean found = false;
+			for (HandlerTuple<IPutHandler> tuple : _putHandlers) {
+				if (tuple.matcher.canHandle(target)) {
+					String[] variables = tuple.matcher.parseVariables(target);
+					tuple.handler.handle(request, response, variables, request.getInputStream());
+					found = true;
+					break;
+				}
+			}
+			return found;
+		}
+		private boolean _handleDelete(String target, HttpServletRequest request, HttpServletResponse response) throws IOException
+		{
+			boolean found = false;
+			for (HandlerTuple<IDeleteHandler> tuple : _deleteHandlers) {
+				if (tuple.matcher.canHandle(target)) {
+					String[] variables = tuple.matcher.parseVariables(target);
+					tuple.handler.handle(request, response, variables);
+					found = true;
+					break;
+				}
+			}
+			return found;
+		}
+		private Object _handleWebSocketUpgrade(ServletUpgradeRequest req, ServletUpgradeResponse resp)
+		{
+			Object socket = null;
+			String target = req.getRequestPath();
+			for (WebSocketFactoryTuple tuple : _webSocketFactories) {
+				if (tuple.matcher.canHandle(target)) {
+					// We know that we can handle this path so select the protocols.
+					for (String subProtocol : req.getSubProtocols()) {
+						if (tuple.acceptBinary && "binary".equals(subProtocol)) {
+							resp.setAcceptedSubProtocol(subProtocol);
+						} else if (tuple.acceptText && "text".equals(subProtocol)) {
+							resp.setAcceptedSubProtocol(subProtocol);
+						}
+					}
+					String[] variables = tuple.matcher.parseVariables(target);
+					socket = tuple.factory.create(variables);
+					break;
+				}
+			}
+			return socket;
 		}
 	}
 

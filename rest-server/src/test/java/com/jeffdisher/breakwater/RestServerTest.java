@@ -26,12 +26,6 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import com.jeffdisher.breakwater.IDeleteHandler;
-import com.jeffdisher.breakwater.IGetHandler;
-import com.jeffdisher.breakwater.IPostHandler;
-import com.jeffdisher.breakwater.IPutHandler;
-import com.jeffdisher.breakwater.RestServer;
-import com.jeffdisher.breakwater.StringMultiMap;
 import com.jeffdisher.breakwater.utilities.RestHelpers;
 
 
