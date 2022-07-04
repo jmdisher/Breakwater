@@ -17,6 +17,7 @@ import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.websocket.api.RemoteEndpoint;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketListener;
+import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.Assert;
 import org.junit.Test;
@@ -335,63 +336,135 @@ public class RestServerTest {
 
 	@Test
 	public void testWebSocket() throws Throwable {
-		String testString = "test";
+		CountDownLatch closeLatch = new CountDownLatch(2);
 		Throwable[] failureReference = new Throwable[1];
-		CountDownLatch latch = new CountDownLatch(2);
 		RestServer server = new RestServer(8080, null);
-		server.addWebSocketFactory("/ws", 1, true, true, (String[] variables) -> new Listener(variables, latch, failureReference));
-		server.start();
-		
-		WebSocketClient client = new WebSocketClient();
-		client.start();
-		client.connect(new WebSocketListener() {
-			private RemoteEndpoint _endpoint;
-			private String _stringReceived;
-			private int _byteCountReceived;
+		// We want to create a server with 2 protocols, at the same root address, so make sure that we can resolve multiple protocols.
+		server.addWebSocketFactory("/ws", 1, "textPrefix", (String[] variables) -> new NamedListener(variables) {
 			@Override
-			public void onWebSocketClose(int statusCode, String reason) {
+			public void onConnect(String name, RemoteEndpoint endpoint)
+			{
 			}
 			@Override
-			public void onWebSocketConnect(Session session) {
-				_endpoint = session.getRemote();
+			public void onError(String name, RemoteEndpoint endpoint, Throwable error)
+			{
+				failureReference[0] = error;
 			}
 			@Override
-			public void onWebSocketError(Throwable cause) {
-				cause.printStackTrace();
+			public void onBinary(String name, RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				Assert.fail();
 			}
 			@Override
-			public void onWebSocketBinary(byte[] payload, int offset, int len) {
-				// We expect that the binary will be the name.
-				Assert.assertEquals(testString, new String(payload, offset, len, StandardCharsets.UTF_8));
-				// Send our echo once we have both messages.
-				_byteCountReceived = len;
-				if (null != _stringReceived) {
-					_send();
+			public void onText(String name, RemoteEndpoint endpoint, String message)
+			{
+				try
+				{
+					endpoint.sendString(name + message);
 				}
-			}
-			@Override
-			public void onWebSocketText(String message) {
-				// We expect that the message will be the name.
-				Assert.assertEquals(testString, message);
-				_stringReceived = message;
-				if (_byteCountReceived > 0) {
-					_send();
-				}
-			}
-			private void _send() {
-				String text = _stringReceived + _byteCountReceived;
-				try {
-					_endpoint.sendString(text);
-					_endpoint.sendBytes(ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
-				} catch (IOException e) {
+				catch (IOException e)
+				{
 					failureReference[0] = e;
 				}
 			}
-		}, new URI("ws://localhost:8080/ws/" + testString));
-		latch.await();
-		client.stop();
+			@Override
+			public void onClose()
+			{
+				closeLatch.countDown();
+			}
+		});
+		server.addWebSocketFactory("/ws", 1, "binaryRotate", (String[] variables) -> new NamedListener(variables) {
+			@Override
+			public void onConnect(String name, RemoteEndpoint endpoint)
+			{
+			}
+			@Override
+			public void onError(String name, RemoteEndpoint endpoint, Throwable error)
+			{
+				failureReference[0] = error;
+			}
+			@Override
+			public void onBinary(String name, RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				byte rotate = Byte.valueOf(name);
+				for (int i = 0; i < len; ++i)
+				{
+					payload[offset + i] = (byte) (payload[offset + i] + rotate);
+				}
+				try
+				{
+					endpoint.sendBytes(ByteBuffer.wrap(payload, offset, len));
+				}
+				catch (IOException e)
+				{
+					failureReference[0] = e;
+				}
+			}
+			@Override
+			public void onText(String name, RemoteEndpoint endpoint, String message)
+			{
+				Assert.fail();
+			}
+			@Override
+			public void onClose()
+			{
+				closeLatch.countDown();
+			}
+		});
+		server.start();
+		
+		String textOut[] = new String[1];
+		ProtocolClient textClient = new ProtocolClient("ws://localhost:8080/ws/prefix_", "textPrefix") {
+			@Override
+			public void onError(RemoteEndpoint endpoint, Throwable error)
+			{
+				failureReference[0] = error;
+			}
+			@Override
+			public void onBinary(RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				Assert.fail();
+			}
+			@Override
+			public void onText(RemoteEndpoint endpoint, String message)
+			{
+				textOut[0] = message;
+			}
+		};
+		byte[] binaryOut = new byte[4];
+		ProtocolClient binaryClient = new ProtocolClient("ws://localhost:8080/ws/16", "binaryRotate") {
+			@Override
+			public void onError(RemoteEndpoint endpoint, Throwable error)
+			{
+				failureReference[0] = error;
+			}
+			@Override
+			public void onBinary(RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				Assert.assertEquals(binaryOut.length, len);
+				System.arraycopy(payload, offset, binaryOut, 0, len);
+				
+			}
+			@Override
+			public void onText(RemoteEndpoint endpoint, String message)
+			{
+				Assert.fail();
+			}
+		};
+		textClient.waitForConnect();
+		binaryClient.waitForConnect();
+		String text = "testText";
+		byte[] binary = new byte[] { 0, 1, 2, 3 };
+		textClient.sendText(text);
+		binaryClient.sendBinary(binary);
+		textClient.stop();
+		binaryClient.stop();
+		closeLatch.await();
 		server.stop();
+		
 		Assert.assertNull(failureReference[0]);
+		Assert.assertEquals("prefix_testText", textOut[0]);
+		Assert.assertArrayEquals(new byte[] { 16, 17, 18, 19 }, binaryOut);
 	}
 
 
@@ -404,42 +477,95 @@ public class RestServerTest {
 	}
 
 
-	public static class Listener implements WebSocketListener {
+	public static abstract class NamedListener implements WebSocketListener {
 		private final String _name;
-		private final CountDownLatch _latch;
-		private final Throwable[] _failureReference;
 		private RemoteEndpoint _endpoint;
 		
-		public Listener(String[] variables, CountDownLatch latch, Throwable[] failureReference) {
+		public NamedListener(String[] variables) {
 			_name = variables[0];
-			_latch = latch;
-			_failureReference = failureReference;
+		}
+		@Override
+		public void onWebSocketClose(int statusCode, String reason) {
+			this.onClose();
+		}
+		@Override
+		public void onWebSocketConnect(Session session) {
+			_endpoint = session.getRemote();
+			this.onConnect(_name, _endpoint);
+		}
+		@Override
+		public void onWebSocketError(Throwable cause) {
+			this.onError(_name, _endpoint, cause);
+		}
+		@Override
+		public void onWebSocketBinary(byte[] payload, int offset, int len) {
+			this.onBinary(_name, _endpoint, payload, offset, len);
+		}
+		@Override
+		public void onWebSocketText(String message) {
+			this.onText(_name, _endpoint, message);
+		}
+		public abstract void onConnect(String name, RemoteEndpoint endpoint);
+		public abstract void onError(String name, RemoteEndpoint endpoint, Throwable error);
+		public abstract void onBinary(String name, RemoteEndpoint endpoint, byte[] payload, int offset, int len);
+		public abstract void onText(String name, RemoteEndpoint endpoint, String message);
+		public abstract void onClose();
+	}
+
+
+	public static abstract class ProtocolClient implements WebSocketListener
+	{
+		private final WebSocketClient _client;
+		private RemoteEndpoint _endpoint;
+		public ProtocolClient(String uri, String protocol) throws Exception
+		{
+			_client = new WebSocketClient();
+			_client.start();
+			ClientUpgradeRequest req = new ClientUpgradeRequest();
+			req.setSubProtocols(protocol);
+			_client.connect(this, new URI(uri), req);
+		}
+		public void sendText(String text) throws IOException
+		{
+			_endpoint.sendString(text);
+		}
+		public void sendBinary(byte[] binary) throws IOException
+		{
+			_endpoint.sendBytes(ByteBuffer.wrap(binary));
+		}
+		public synchronized void waitForConnect() throws InterruptedException
+		{
+			while (null == _endpoint)
+			{
+				this.wait();
+			}
+		}
+		public void stop() throws Exception
+		{
+			_client.stop();
 		}
 		@Override
 		public void onWebSocketClose(int statusCode, String reason) {
 		}
 		@Override
-		public void onWebSocketConnect(Session session) {
+		public synchronized void onWebSocketConnect(Session session) {
 			_endpoint = session.getRemote();
-			try {
-				_endpoint.sendString(_name);
-				_endpoint.sendBytes(ByteBuffer.wrap(_name.getBytes(StandardCharsets.UTF_8)));
-			} catch (IOException e) {
-				_failureReference[0] = e;
-			}
+			this.notifyAll();
 		}
 		@Override
 		public void onWebSocketError(Throwable cause) {
+			this.onError(_endpoint, cause);
 		}
 		@Override
 		public void onWebSocketBinary(byte[] payload, int offset, int len) {
-			Assert.assertEquals(_name.length() + 1, len);
-			_latch.countDown();
+			this.onBinary(_endpoint, payload, offset, len);
 		}
 		@Override
 		public void onWebSocketText(String message) {
-			Assert.assertEquals(_name + _name.length(), message);
-			_latch.countDown();
+			this.onText(_endpoint, message);
 		}
+		public abstract void onError(RemoteEndpoint endpoint, Throwable error);
+		public abstract void onBinary(RemoteEndpoint endpoint, byte[] payload, int offset, int len);
+		public abstract void onText(RemoteEndpoint endpoint, String message);
 	}
 }

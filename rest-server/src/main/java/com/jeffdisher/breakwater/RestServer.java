@@ -19,6 +19,7 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.MultiMap;
 import org.eclipse.jetty.util.UrlEncoded;
 import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.websocket.api.WebSocketListener;
 import org.eclipse.jetty.websocket.server.JettyServerUpgradeRequest;
 import org.eclipse.jetty.websocket.server.JettyServerUpgradeResponse;
 import org.eclipse.jetty.websocket.server.JettyWebSocketCreator;
@@ -108,10 +109,10 @@ public class RestServer {
 		_putHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
 	}
 
-	public void addWebSocketFactory(String pathPrefix, int variableCount, boolean acceptText, boolean acceptBinary, IWebSocketFactory factory) {
+	public void addWebSocketFactory(String pathPrefix, int variableCount, String protocolName, IWebSocketFactory factory) {
 		Assert.assertTrue(!pathPrefix.endsWith("/"));
 		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_webSocketFactories.add(0, new WebSocketFactoryTuple(pathPrefix, variableCount, acceptText, acceptBinary, factory));
+		_webSocketFactories.add(0, new WebSocketFactoryTuple(pathPrefix, variableCount, protocolName, factory));
 	}
 
 	public void start() {
@@ -311,23 +312,29 @@ public class RestServer {
 			}
 			return found;
 		}
-		private Object _handleWebSocketUpgrade(JettyServerUpgradeRequest req, JettyServerUpgradeResponse resp)
+		private WebSocketListener _handleWebSocketUpgrade(JettyServerUpgradeRequest req, JettyServerUpgradeResponse resp)
 		{
-			Object socket = null;
+			WebSocketListener socket = null;
 			String target = req.getRequestPath();
 			for (WebSocketFactoryTuple tuple : _webSocketFactories) {
 				if (tuple.matcher.canHandle(target)) {
 					// We know that we can handle this path so select the protocols.
+					boolean didMatch = false;
 					for (String subProtocol : req.getSubProtocols()) {
-						if (tuple.acceptBinary && "binary".equals(subProtocol)) {
+						if (tuple.protocolName.equals(subProtocol))
+						{
 							resp.setAcceptedSubProtocol(subProtocol);
-						} else if (tuple.acceptText && "text".equals(subProtocol)) {
-							resp.setAcceptedSubProtocol(subProtocol);
+							// We currently only support a given factory only being able to build WebSockets which implement a single protocol.
+							didMatch = true;
+							break;
 						}
 					}
-					String[] variables = tuple.matcher.parseVariables(target);
-					socket = tuple.factory.create(variables);
-					break;
+					if (didMatch)
+					{
+						String[] variables = tuple.matcher.parseVariables(target);
+						socket = tuple.factory.create(variables);
+						break;
+					}
 				}
 			}
 			return socket;
@@ -348,14 +355,12 @@ public class RestServer {
 
 	private static class WebSocketFactoryTuple {
 		public final PathMatcher matcher;
-		public final boolean acceptText;
-		public final boolean acceptBinary;
+		public final String protocolName;
 		public final IWebSocketFactory factory;
 		
-		public WebSocketFactoryTuple(String pathPrefix, int variableCount, boolean acceptText, boolean acceptBinary, IWebSocketFactory factory) {
+		public WebSocketFactoryTuple(String pathPrefix, int variableCount, String protocolName, IWebSocketFactory factory) {
 			this.matcher = new PathMatcher(pathPrefix, variableCount);
-			this.acceptText = acceptText;
-			this.acceptBinary = acceptBinary;
+			this.protocolName = protocolName;
 			this.factory = factory;
 		}
 	}
