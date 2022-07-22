@@ -3,6 +3,7 @@ package com.jeffdisher.breakwater;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -383,6 +384,10 @@ public class RestServer {
 			String variableString = target.substring(_pathPrefix.length());
 			String[] variables = new String[_variableCount];
 			System.arraycopy(variableString.split("/"), 1, variables, 0, _variableCount);
+			for (int i = 0; i < variables.length; ++i)
+			{
+				variables[i] = URLDecoder.decode(variables[i], StandardCharsets.UTF_8);
+			}
 			return variables;
 		}
 	}
