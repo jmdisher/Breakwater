@@ -7,5 +7,5 @@ import jakarta.servlet.http.HttpServletResponse;
 
 
 public interface IPostRawHandler {
-	void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, byte[] rawPost) throws IOException;
+	void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException;
 }

@@ -221,10 +221,25 @@ public class RestServerTest {
 		RestServer server = new RestServer(8080, null);
 		server.addPostRawHandler("/test", 0, new IPostRawHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+				InputStream stream = request.getInputStream();
+				int postSize = 0;
+				byte[] raw = new byte[1024];
+				while (null != raw)
+				{
+					int size = stream.read(raw, 0, raw.length);
+					if (size > 0)
+					{
+						postSize += size;
+					}
+					else
+					{
+						raw = null;
+					}
+				}
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
-				response.getWriter().print("" + rawPost.length);
+				response.getWriter().print("" + postSize);
 				stopLatch.countDown();
 			}});
 		server.start();
@@ -243,9 +258,10 @@ public class RestServerTest {
 		HttpClient httpClient = new HttpClient();
 		server.addPostRawHandler("/start", 0, new IPostRawHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
+				byte[] rawPost = request.getInputStream().readAllBytes();
 				if (rawPost.length > 0) {
 					response.getWriter().print(new String(rawPost, StandardCharsets.UTF_8));
 					request.getSession(true).setAttribute("NAME", new String(rawPost, StandardCharsets.UTF_8));

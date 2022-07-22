@@ -1,6 +1,5 @@
 package com.jeffdisher.breakwater;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLDecoder;
@@ -292,30 +291,8 @@ public class RestServer {
 					if (tuple.matcher.canHandle(target)) {
 						String[] variables = tuple.matcher.parseVariables(target);
 						
-						// Note that we can't rely on the content length since the client may not send it so only allow what we would normally allow for a single variable entry.
-						ByteArrayOutputStream holder = new ByteArrayOutputStream();
-						InputStream stream = request.getInputStream();
-						boolean keepReading = true;
-						byte[] temp = new byte[1024];
-						int bytesRead = 0;
-						while (keepReading) {
-							int didRead = stream.read(temp);
-							if (didRead > 0) {
-								holder.write(temp, 0, didRead);
-								bytesRead += didRead;
-								if (bytesRead >= MAX_POST_SIZE) {
-									keepReading = false;
-								}
-							} else {
-								keepReading = false;
-							}
-						}
-						int validSize = (bytesRead > MAX_POST_SIZE)
-								? MAX_POST_SIZE
-								: bytesRead;
-						byte[] raw = new byte[validSize];
-						System.arraycopy(holder.toByteArray(), 0, raw, 0, validSize);
-						tuple.handler.handle(request, response, variables, raw);
+						// In this case, the user will need to read the data directly from the input stream in request.
+						tuple.handler.handle(request, response, variables);
 						found = true;
 						break;
 					}
