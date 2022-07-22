@@ -125,9 +125,9 @@ public class RestServerTest {
 	public void testPostParts() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080, null);
-		server.addPostHandler("/test", 0, new IPostHandler() {
+		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + multiPart.valueCount());
@@ -169,9 +169,9 @@ public class RestServerTest {
 	public void testPostPartsDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080, null);
-		server.addPostHandler("/test", 0, new IPostHandler() {
+		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + multiPart.valueCount());
@@ -194,9 +194,9 @@ public class RestServerTest {
 	public void testPostFormDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080, null);
-		server.addPostHandler("/test", 0, new IPostHandler() {
+		server.addPostFormHandler("/test", 0, new IPostFormHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + formVariables.valueCount());
@@ -219,9 +219,9 @@ public class RestServerTest {
 	public void testPostRawBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(8080, null);
-		server.addPostHandler("/test", 0, new IPostHandler() {
+		server.addPostRawHandler("/test", 0, new IPostRawHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + rawPost.length);
@@ -241,9 +241,9 @@ public class RestServerTest {
 	public void testSessionState() throws Throwable {
 		RestServer server = new RestServer(8080, null);
 		HttpClient httpClient = new HttpClient();
-		server.addPostHandler("/start", 0, new IPostHandler() {
+		server.addPostRawHandler("/start", 0, new IPostRawHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables, StringMultiMap<byte[]> multiPart, byte[] rawPost) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, byte[] rawPost) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				if (rawPost.length > 0) {

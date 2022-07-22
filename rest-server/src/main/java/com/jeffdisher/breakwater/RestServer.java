@@ -45,7 +45,9 @@ public class RestServer {
 	private final Server _server;
 	private final List<HandlerTuple<IDeleteHandler>> _deleteHandlers;
 	private final List<HandlerTuple<IGetHandler>> _getHandlers;
-	private final List<HandlerTuple<IPostHandler>> _postHandlers;
+	private final List<HandlerTuple<IPostFormHandler>> _postFormHandlers;
+	private final List<HandlerTuple<IPostMultiPartHandler>> _postMultiPartHandlers;
+	private final List<HandlerTuple<IPostRawHandler>> _postRawHandlers;
 	private final List<HandlerTuple<IPutHandler>> _putHandlers;
 	private final List<WebSocketFactoryTuple> _webSocketFactories;
 
@@ -81,7 +83,9 @@ public class RestServer {
 		
 		_deleteHandlers = new ArrayList<>();
 		_getHandlers = new ArrayList<>();
-		_postHandlers = new ArrayList<>();
+		_postFormHandlers = new ArrayList<>();
+		_postMultiPartHandlers = new ArrayList<>();
+		_postRawHandlers = new ArrayList<>();
 		_putHandlers = new ArrayList<>();
 		_webSocketFactories = new ArrayList<>();
 	}
@@ -98,10 +102,22 @@ public class RestServer {
 		_getHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
 	}
 
-	public void addPostHandler(String pathPrefix, int variableCount, IPostHandler handler) {
+	public void addPostFormHandler(String pathPrefix, int variableCount, IPostFormHandler handler) {
 		Assert.assertTrue(!pathPrefix.endsWith("/"));
 		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_postHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+		_postFormHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	}
+
+	public void addPostMultiPartHandler(String pathPrefix, int variableCount, IPostMultiPartHandler handler) {
+		Assert.assertTrue(!pathPrefix.endsWith("/"));
+		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
+		_postMultiPartHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	}
+
+	public void addPostRawHandler(String pathPrefix, int variableCount, IPostRawHandler handler) {
+		Assert.assertTrue(!pathPrefix.endsWith("/"));
+		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
+		_postRawHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
 	}
 
 	public void addPutHandler(String pathPrefix, int variableCount, IPutHandler handler) {
@@ -213,19 +229,18 @@ public class RestServer {
 		private boolean _handlePost(String target, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException
 		{
 			boolean found = false;
-			for (HandlerTuple<IPostHandler> tuple : _postHandlers) {
-				if (tuple.matcher.canHandle(target)) {
-					String[] variables = tuple.matcher.parseVariables(target);
-					StringMultiMap<byte[]> parts = null;
-					StringMultiMap<String> form = null;
-					byte[] raw = null;
-					// This line may include things like boundary, etc, so it can't be strict equality.
-					String contentType = request.getContentType();
-					boolean isMultiPart = (null != contentType) && contentType.startsWith("multipart/form-data");
-					boolean isFormEncoded = (null != contentType) && contentType.startsWith("application/x-www-form-urlencoded");
-					
-					if (isMultiPart) {
-						parts = new StringMultiMap<>();
+			
+			// This line may include things like boundary, etc, so it can't be strict equality.
+			String contentType = request.getContentType();
+			boolean isMultiPart = (null != contentType) && contentType.startsWith("multipart/form-data");
+			boolean isFormEncoded = (null != contentType) && contentType.startsWith("application/x-www-form-urlencoded");
+			
+			if (isMultiPart)
+			{
+				for (HandlerTuple<IPostMultiPartHandler> tuple : _postMultiPartHandlers) {
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
+						StringMultiMap<byte[]> parts = new StringMultiMap<>();
 						request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
 						for (Part part : request.getParts()) {
 							String name = part.getName();
@@ -245,8 +260,18 @@ public class RestServer {
 								break;
 							}
 						}
-					} else if (isFormEncoded) {
-						form = new StringMultiMap<>();
+						tuple.handler.handle(request, response, variables, parts);
+						found = true;
+						break;
+					}
+				}
+			}
+			else if (isFormEncoded)
+			{
+				for (HandlerTuple<IPostFormHandler> tuple : _postFormHandlers) {
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
+						StringMultiMap<String> form = new StringMultiMap<>();
 						MultiMap<String> parsed = new MultiMap<String>();
 						UrlEncoded.decodeTo(request.getInputStream(), parsed, StandardCharsets.UTF_8, MAX_POST_SIZE, MAX_VARIABLES);
 						for (Map.Entry<String, List<String>> entry : parsed.entrySet()) {
@@ -255,7 +280,18 @@ public class RestServer {
 								form.append(key, value);
 							}
 						}
-					} else {
+						tuple.handler.handle(request, response, variables, form);
+						found = true;
+						break;
+					}
+				}
+			}
+			else
+			{
+				for (HandlerTuple<IPostRawHandler> tuple : _postRawHandlers) {
+					if (tuple.matcher.canHandle(target)) {
+						String[] variables = tuple.matcher.parseVariables(target);
+						
 						// Note that we can't rely on the content length since the client may not send it so only allow what we would normally allow for a single variable entry.
 						ByteArrayOutputStream holder = new ByteArrayOutputStream();
 						InputStream stream = request.getInputStream();
@@ -277,12 +313,12 @@ public class RestServer {
 						int validSize = (bytesRead > MAX_POST_SIZE)
 								? MAX_POST_SIZE
 								: bytesRead;
-						raw = new byte[validSize];
+						byte[] raw = new byte[validSize];
 						System.arraycopy(holder.toByteArray(), 0, raw, 0, validSize);
+						tuple.handler.handle(request, response, variables, raw);
+						found = true;
+						break;
 					}
-					tuple.handler.handle(request, response, variables, form, parts, raw);
-					found = true;
-					break;
 				}
 			}
 			return found;
