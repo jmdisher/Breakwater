@@ -2,6 +2,7 @@ package com.jeffdisher.breakwater;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -11,7 +12,6 @@ import java.util.Map;
 
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -50,12 +50,16 @@ public class RestServer {
 	private final List<HandlerTuple<IPutHandler>> _putHandlers;
 	private final List<WebSocketFactoryTuple> _webSocketFactories;
 
-	public RestServer(int port, Resource staticContentResource) {
+	/**
+	 * Creates a new RestServer, ready to be started with start() once handlers have been installed.
+	 * 
+	 * @param bindAddress The interface to bind.
+	 * @param port The port on which to listen.
+	 * @param staticContentResource Handler for static resources (null if no general static handling required).
+	 */
+	public RestServer(InetSocketAddress bindAddress, Resource staticContentResource) {
 		_entryPoint = new EntryPoint();
-		_server = new Server();
-		ServerConnector connector = new ServerConnector(_server);
-		connector.setPort(port);
-		_server.setConnectors(new ServerConnector[] { connector });
+		_server = new Server(bindAddress);
 		
 		// Create the static resource handler.
 		ResourceHandler staticResources = null;

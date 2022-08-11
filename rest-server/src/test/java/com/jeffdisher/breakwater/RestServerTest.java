@@ -4,9 +4,16 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ConnectException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import org.eclipse.jetty.client.HttpClient;
@@ -20,6 +27,7 @@ import org.eclipse.jetty.websocket.api.WebSocketListener;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
@@ -34,7 +42,7 @@ public class RestServerTest {
 	@Test
 	public void testBasicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -52,7 +60,7 @@ public class RestServerTest {
 
 	@Test
 	public void testNotFound() throws Throwable {
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -69,7 +77,7 @@ public class RestServerTest {
 	@Test
 	public void testDynamicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -98,7 +106,7 @@ public class RestServerTest {
 	@Test
 	public void testPutBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addPutHandler("/test", 0, new IPutHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
@@ -124,7 +132,7 @@ public class RestServerTest {
 	@Test
 	public void testPostParts() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
@@ -148,7 +156,7 @@ public class RestServerTest {
 	@Test
 	public void testDelete() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addDeleteHandler("/test", 0, new IDeleteHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
@@ -168,7 +176,7 @@ public class RestServerTest {
 	@Test
 	public void testPostPartsDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
@@ -193,7 +201,7 @@ public class RestServerTest {
 	@Test
 	public void testPostFormDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addPostFormHandler("/test", 0, new IPostFormHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables) throws IOException {
@@ -218,7 +226,7 @@ public class RestServerTest {
 	@Test
 	public void testPostRawBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		server.addPostRawHandler("/test", 0, new IPostRawHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
@@ -254,7 +262,7 @@ public class RestServerTest {
 
 	@Test
 	public void testSessionState() throws Throwable {
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		HttpClient httpClient = new HttpClient();
 		server.addPostRawHandler("/start", 0, new IPostRawHandler() {
 			@Override
@@ -341,7 +349,7 @@ public class RestServerTest {
 		folder.create();
 		File dir = folder.newFolder();
 		new File(dir, "temp.txt").createNewFile();
-		RestServer server = new RestServer(8080, new PathResource(dir));
+		RestServer server = new RestServer(new InetSocketAddress(8080), new PathResource(dir));
 		server.start();
 		byte[] found = RestHelpers.get("http://localhost:8080/temp.txt");
 		byte[] missing = RestHelpers.get("http://localhost:8080/temp2.txt");
@@ -354,7 +362,7 @@ public class RestServerTest {
 	public void testWebSocket() throws Throwable {
 		CountDownLatch closeLatch = new CountDownLatch(2);
 		Throwable[] failureReference = new Throwable[1];
-		RestServer server = new RestServer(8080, null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		// We want to create a server with 2 protocols, at the same root address, so make sure that we can resolve multiple protocols.
 		server.addWebSocketFactory("/ws", 1, "textPrefix", (String[] variables) -> new NamedListener(variables) {
 			@Override
@@ -483,6 +491,90 @@ public class RestServerTest {
 		Assert.assertArrayEquals(new byte[] { 16, 17, 18, 19 }, binaryOut);
 	}
 
+	@Test
+	public void testSingleInterface() throws Throwable {
+		// Create the static resource.
+		TemporaryFolder folder = new TemporaryFolder();
+		folder.create();
+		File dir = folder.newFolder();
+		new File(dir, "temp.txt").createNewFile();
+		
+		// Find the interfaces.
+		List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+		// (we can only run the test if there is more than one interface).
+		Assume.assumeTrue(interfaces.size() > 1);
+		List<InetSocketAddress> addresses = new ArrayList<>();
+		for (NetworkInterface network : interfaces)
+		{
+			for (InetAddress address : Collections.list(network.getInetAddresses()))
+			{
+				addresses.add(new InetSocketAddress(address, 8080));
+			}
+		}
+		for (InetSocketAddress hostAddress : addresses)
+		{
+			System.out.println("Host as: " + hostAddress);
+			RestServer server = new RestServer(hostAddress, new PathResource(dir));
+			server.start();
+			for (InetSocketAddress fetchAddress : addresses)
+			{
+				String hostPart = _addressAsUrlString(fetchAddress.getAddress());
+				String url = "http://" + hostPart + ":" + fetchAddress.getPort() + "/temp.txt";
+				System.out.print("\tTest as: " + url);
+				boolean expectedSuccess = (fetchAddress == hostAddress);
+				try
+				{
+					byte[] found = RestHelpers.get(url);
+					byte[] expected = new byte[0];
+					Assert.assertArrayEquals(expected, found);
+					Assert.assertTrue(expectedSuccess);
+					System.out.println(" -- SUCCESS");
+				}
+				catch (ConnectException e)
+				{
+					// We failed to connect.
+					Assert.assertFalse(expectedSuccess);
+					System.out.println(" -- FAILED (expected)");
+				}
+			}
+			server.stop();
+		}
+	}
+
+	@Test
+	public void testAllInterfaces() throws Throwable {
+		// Create the static resource.
+		TemporaryFolder folder = new TemporaryFolder();
+		folder.create();
+		File dir = folder.newFolder();
+		new File(dir, "temp.txt").createNewFile();
+		// Host on all interfaces.
+		RestServer server = new RestServer(new InetSocketAddress(8080), new PathResource(dir));
+		
+		// Find the interfaces.
+		List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+		// (we can only run the test if there is more than one interface).
+		Assume.assumeTrue(interfaces.size() > 1);
+		List<InetSocketAddress> addresses = new ArrayList<>();
+		for (NetworkInterface network : interfaces)
+		{
+			for (InetAddress address : Collections.list(network.getInetAddresses()))
+			{
+				addresses.add(new InetSocketAddress(address, 8080));
+			}
+		}
+		server.start();
+		for (InetSocketAddress fetchAddress : addresses)
+		{
+			String hostPart = _addressAsUrlString(fetchAddress.getAddress());
+			String url = "http://" + hostPart + ":" + fetchAddress.getPort() + "/temp.txt";
+			byte[] found = RestHelpers.get(url);
+			byte[] expected = new byte[0];
+			Assert.assertArrayEquals(expected, found);
+		}
+		server.stop();
+	}
+
 
 	private String _sendRequest(HttpClient httpClient, HttpMethod method, String url, String loggedInUserName) throws Throwable {
 		Request request = httpClient.newRequest(url);
@@ -490,6 +582,55 @@ public class RestServerTest {
 		request.body(new StringRequestContent(loggedInUserName));
 		String content = new String(request.send().getContent(), StandardCharsets.UTF_8);
 		return content;
+	}
+
+	private static String _addressAsUrlString(InetAddress address)
+	{
+		// I feel like there is probably a helper somewhere to do this, but I can't find it.
+		byte[] raw = address.getAddress();
+		String result = null;
+		boolean isv6 = (16 == raw.length);
+		if (isv6)
+		{
+			String working = "";
+			int extent = 0;
+			for (byte b : raw)
+			{
+				if (2 == extent)
+				{
+					working += ":";
+					extent = 0;
+				}
+				int i = Byte.toUnsignedInt(b);
+				String hex = Integer.toHexString(i);
+				if (1 == hex.length())
+				{
+					working += "0";
+				}
+				working += hex;
+				extent += 1;
+			}
+			result = "[" + working + "]";
+		}
+		else
+		{
+			Assert.assertEquals(4, raw.length);
+			String working = "";
+			int extent = 0;
+			for (byte b : raw)
+			{
+				if (1 == extent)
+				{
+					working += ".";
+					extent = 0;
+				}
+				int i = Byte.toUnsignedInt(b);
+				working += i;
+				extent += 1;
+			}
+			result = working;
+		}
+		return result;
 	}
 
 
