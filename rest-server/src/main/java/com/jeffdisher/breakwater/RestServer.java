@@ -154,6 +154,14 @@ public class RestServer {
 		}
 	}
 
+	/**
+	 * @return The port the server bound for listening (undefined before start()).
+	 */
+	public int getPort()
+	{
+		return _server.getURI().getPort();
+	}
+
 
 	private class EntryPoint extends JettyWebSocketServlet {
 		private static final long serialVersionUID = 1L;

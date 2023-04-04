@@ -544,6 +544,59 @@ public class RestServerTest {
 	}
 
 	@Test
+	public void testSingleInterfaceRandomPort() throws Throwable {
+		// Create the static resource.
+		TemporaryFolder folder = new TemporaryFolder();
+		folder.create();
+		File dir = folder.newFolder();
+		new File(dir, "temp.txt").createNewFile();
+		
+		// Find the interfaces.
+		List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+		// (we can only run the test if there is more than one interface).
+		Assume.assumeTrue(interfaces.size() > 1);
+		List<InetSocketAddress> addresses = new ArrayList<>();
+		for (NetworkInterface network : interfaces)
+		{
+			for (InetAddress address : Collections.list(network.getInetAddresses()))
+			{
+				// Request port 0 so the server will pick an ephemeral port.
+				addresses.add(new InetSocketAddress(address, 0));
+			}
+		}
+		for (InetSocketAddress hostAddress : addresses)
+		{
+			System.out.println("Host as: " + hostAddress);
+			RestServer server = new RestServer(hostAddress, new PathResource(dir));
+			server.start();
+			// Get the port so we can override the InetSocketAddress objects in the URL.
+			int port = server.getPort();
+			for (InetSocketAddress fetchAddress : addresses)
+			{
+				String hostPart = _addressAsUrlString(fetchAddress.getAddress());
+				String url = "http://" + hostPart + ":" + port + "/temp.txt";
+				System.out.print("\tTest as: " + url);
+				boolean expectedSuccess = (fetchAddress == hostAddress);
+				try
+				{
+					byte[] found = RestHelpers.get(url);
+					byte[] expected = new byte[0];
+					Assert.assertArrayEquals(expected, found);
+					Assert.assertTrue(expectedSuccess);
+					System.out.println(" -- SUCCESS");
+				}
+				catch (ConnectException e)
+				{
+					// We failed to connect.
+					Assert.assertFalse(expectedSuccess);
+					System.out.println(" -- FAILED (expected)");
+				}
+			}
+			server.stop();
+		}
+	}
+
+	@Test
 	public void testAllInterfaces() throws Throwable {
 		// Create the static resource.
 		TemporaryFolder folder = new TemporaryFolder();
@@ -566,9 +619,12 @@ public class RestServerTest {
 			}
 		}
 		server.start();
+		// Get the port to verify it matches.
+		int port = server.getPort();
 		for (InetSocketAddress fetchAddress : addresses)
 		{
 			String hostPart = _addressAsUrlString(fetchAddress.getAddress());
+			Assert.assertEquals(port, fetchAddress.getPort());
 			String url = "http://" + hostPart + ":" + fetchAddress.getPort() + "/temp.txt";
 			byte[] found = RestHelpers.get(url);
 			byte[] expected = new byte[0];
