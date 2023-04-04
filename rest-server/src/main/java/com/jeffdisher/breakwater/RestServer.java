@@ -350,7 +350,7 @@ public class RestServer {
 					if (didMatch)
 					{
 						String[] variables = tuple.matcher.parseVariables(target);
-						socket = tuple.factory.create(variables);
+						socket = tuple.factory.create(req, variables);
 						break;
 					}
 				}

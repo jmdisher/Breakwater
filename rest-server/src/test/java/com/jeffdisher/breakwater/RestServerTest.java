@@ -24,8 +24,10 @@ import org.eclipse.jetty.util.resource.PathResource;
 import org.eclipse.jetty.websocket.api.RemoteEndpoint;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketListener;
+import org.eclipse.jetty.websocket.api.exceptions.UpgradeException;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.eclipse.jetty.websocket.server.JettyServerUpgradeRequest;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
@@ -364,7 +366,7 @@ public class RestServerTest {
 		Throwable[] failureReference = new Throwable[1];
 		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		// We want to create a server with 2 protocols, at the same root address, so make sure that we can resolve multiple protocols.
-		server.addWebSocketFactory("/ws", 1, "textPrefix", (String[] variables) -> new NamedListener(variables) {
+		server.addWebSocketFactory("/ws", 1, "textPrefix", (JettyServerUpgradeRequest upgradeRequest, String[] variables) -> new NamedListener(variables) {
 			@Override
 			public void onConnect(String name, RemoteEndpoint endpoint)
 			{
@@ -397,7 +399,7 @@ public class RestServerTest {
 				closeLatch.countDown();
 			}
 		});
-		server.addWebSocketFactory("/ws", 1, "binaryRotate", (String[] variables) -> new NamedListener(variables) {
+		server.addWebSocketFactory("/ws", 1, "binaryRotate", (JettyServerUpgradeRequest upgradeRequest, String[] variables) -> new NamedListener(variables) {
 			@Override
 			public void onConnect(String name, RemoteEndpoint endpoint)
 			{
@@ -575,6 +577,108 @@ public class RestServerTest {
 		server.stop();
 	}
 
+	@Test
+	public void testFailingWebSocket() throws Throwable {
+		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		boolean[] serverConnect = new boolean[1];
+		boolean[] serverError = new boolean[1];
+		boolean[] serverClose = new boolean[1];
+		// Create a single end-point which will only pass if we give it a specific variable.
+		server.addWebSocketFactory("/ws", 1, "filter", (JettyServerUpgradeRequest upgradeRequest, String[] variables) ->  "filter".equals(variables[0]) ? new NamedListener(variables) {
+			@Override
+			public void onConnect(String name, RemoteEndpoint endpoint)
+			{
+				serverConnect[0] = true;
+			}
+			@Override
+			public void onError(String name, RemoteEndpoint endpoint, Throwable error)
+			{
+				serverError[0] = true;
+			}
+			@Override
+			public void onBinary(String name, RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				Assert.fail();
+			}
+			@Override
+			public void onText(String name, RemoteEndpoint endpoint, String message)
+			{
+				Assert.fail();
+			}
+			@Override
+			public void onClose()
+			{
+				serverClose[0] = true;
+			}
+		} : null);
+		server.start();
+		
+		boolean[] clientError = new boolean[1];
+		
+		ProtocolClient failClient = new ProtocolClient("ws://localhost:8080/ws/bogus", "filter") {
+			@Override
+			public void onError(RemoteEndpoint endpoint, Throwable error)
+			{
+				clientError[0] = true;
+			}
+			@Override
+			public void onBinary(RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				Assert.fail();
+			}
+			@Override
+			public void onText(RemoteEndpoint endpoint, String message)
+			{
+				Assert.fail();
+			}
+		};
+		
+		boolean didFail = false;
+		try
+		{
+			failClient.waitForConnect();
+		}
+		catch (UpgradeException e)
+		{
+			// Expected.
+			didFail = true;
+		}
+		Assert.assertTrue(didFail);
+		failClient.stop();
+		// The failing one should only see the client-side error, but no server-side connect, error, or close.
+		Assert.assertTrue(clientError[0]);
+		Assert.assertFalse(serverConnect[0]);
+		Assert.assertFalse(serverError[0]);
+		Assert.assertFalse(serverClose[0]);
+		
+		clientError[0] = false;
+		ProtocolClient passClient = new ProtocolClient("ws://localhost:8080/ws/filter", "filter") {
+			@Override
+			public void onError(RemoteEndpoint endpoint, Throwable error)
+			{
+				clientError[0] = true;
+			}
+			@Override
+			public void onBinary(RemoteEndpoint endpoint, byte[] payload, int offset, int len)
+			{
+				Assert.fail();
+			}
+			@Override
+			public void onText(RemoteEndpoint endpoint, String message)
+			{
+				Assert.fail();
+			}
+		};
+		passClient.waitForConnect();
+		passClient.stop();
+		// The passing one should see no errors but normal connect and disconnect.
+		Assert.assertFalse(clientError[0]);
+		Assert.assertTrue(serverConnect[0]);
+		Assert.assertFalse(serverError[0]);
+		Assert.assertTrue(serverClose[0]);
+		server.stop();
+	}
+
 
 	private String _sendRequest(HttpClient httpClient, HttpMethod method, String url, String loggedInUserName) throws Throwable {
 		Request request = httpClient.newRequest(url);
@@ -674,6 +778,7 @@ public class RestServerTest {
 	{
 		private final WebSocketClient _client;
 		private RemoteEndpoint _endpoint;
+		private Throwable _error;
 		public ProtocolClient(String uri, String protocol) throws Exception
 		{
 			_client = new WebSocketClient();
@@ -690,11 +795,15 @@ public class RestServerTest {
 		{
 			_endpoint.sendBytes(ByteBuffer.wrap(binary));
 		}
-		public synchronized void waitForConnect() throws InterruptedException
+		public synchronized void waitForConnect() throws Throwable
 		{
-			while (null == _endpoint)
+			while ((null == _endpoint) && (null == _error))
 			{
 				this.wait();
+			}
+			if (null != _error)
+			{
+				throw _error;
 			}
 		}
 		public void stop() throws Exception
@@ -710,7 +819,11 @@ public class RestServerTest {
 			this.notifyAll();
 		}
 		@Override
-		public void onWebSocketError(Throwable cause) {
+		public synchronized void onWebSocketError(Throwable cause) {
+			// Store and notify in case we are stuck in a waitForConnect
+			_error = cause;
+			this.notifyAll();
+			
 			this.onError(_endpoint, cause);
 		}
 		@Override
