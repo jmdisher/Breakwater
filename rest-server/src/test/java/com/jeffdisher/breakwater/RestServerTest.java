@@ -44,7 +44,7 @@ public class RestServerTest {
 	@Test
 	public void testBasicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -62,7 +62,7 @@ public class RestServerTest {
 
 	@Test
 	public void testNotFound() throws Throwable {
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -79,7 +79,7 @@ public class RestServerTest {
 	@Test
 	public void testDynamicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addGetHandler("/test1", 0, new IGetHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
@@ -108,7 +108,7 @@ public class RestServerTest {
 	@Test
 	public void testPutBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addPutHandler("/test", 0, new IPutHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
@@ -134,7 +134,7 @@ public class RestServerTest {
 	@Test
 	public void testPostParts() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
@@ -158,7 +158,7 @@ public class RestServerTest {
 	@Test
 	public void testDelete() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addDeleteHandler("/test", 0, new IDeleteHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
@@ -178,7 +178,7 @@ public class RestServerTest {
 	@Test
 	public void testPostPartsDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
@@ -203,7 +203,7 @@ public class RestServerTest {
 	@Test
 	public void testPostFormDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addPostFormHandler("/test", 0, new IPostFormHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables) throws IOException {
@@ -228,7 +228,7 @@ public class RestServerTest {
 	@Test
 	public void testPostRawBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		server.addPostRawHandler("/test", 0, new IPostRawHandler() {
 			@Override
 			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
@@ -264,7 +264,7 @@ public class RestServerTest {
 
 	@Test
 	public void testSessionState() throws Throwable {
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		HttpClient httpClient = new HttpClient();
 		server.addPostRawHandler("/start", 0, new IPostRawHandler() {
 			@Override
@@ -351,7 +351,7 @@ public class RestServerTest {
 		folder.create();
 		File dir = folder.newFolder();
 		new File(dir, "temp.txt").createNewFile();
-		RestServer server = new RestServer(new InetSocketAddress(8080), new PathResource(dir));
+		RestServer server = new RestServer(new InetSocketAddress(8080), new PathResource(dir), "no-store,no-cache,must-revalidate");
 		server.start();
 		byte[] found = RestHelpers.get("http://localhost:8080/temp.txt");
 		byte[] missing = RestHelpers.get("http://localhost:8080/temp2.txt");
@@ -365,7 +365,7 @@ public class RestServerTest {
 		CountDownLatch closeLatch = new CountDownLatch(2);
 		CountDownLatch clientReadLatch = new CountDownLatch(2);
 		Throwable[] failureReference = new Throwable[1];
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		// We want to create a server with 2 protocols, at the same root address, so make sure that we can resolve multiple protocols.
 		server.addWebSocketFactory("/ws", 1, "textPrefix", (JettyServerUpgradeRequest upgradeRequest, String[] variables) -> new NamedListener(variables) {
 			@Override
@@ -520,7 +520,7 @@ public class RestServerTest {
 		for (InetSocketAddress hostAddress : addresses)
 		{
 			System.out.println("Host as: " + hostAddress);
-			RestServer server = new RestServer(hostAddress, new PathResource(dir));
+			RestServer server = new RestServer(hostAddress, new PathResource(dir), "no-store,no-cache,must-revalidate");
 			server.start();
 			for (InetSocketAddress fetchAddress : addresses)
 			{
@@ -571,7 +571,7 @@ public class RestServerTest {
 		for (InetSocketAddress hostAddress : addresses)
 		{
 			System.out.println("Host as: " + hostAddress);
-			RestServer server = new RestServer(hostAddress, new PathResource(dir));
+			RestServer server = new RestServer(hostAddress, new PathResource(dir), "no-store,no-cache,must-revalidate");
 			server.start();
 			// Get the port so we can override the InetSocketAddress objects in the URL.
 			int port = server.getPort();
@@ -608,7 +608,7 @@ public class RestServerTest {
 		File dir = folder.newFolder();
 		new File(dir, "temp.txt").createNewFile();
 		// Host on all interfaces.
-		RestServer server = new RestServer(new InetSocketAddress(8080), new PathResource(dir));
+		RestServer server = new RestServer(new InetSocketAddress(8080), new PathResource(dir), "no-store,no-cache,must-revalidate");
 		
 		// Find the interfaces.
 		List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
@@ -639,7 +639,7 @@ public class RestServerTest {
 
 	@Test
 	public void testFailingWebSocket() throws Throwable {
-		RestServer server = new RestServer(new InetSocketAddress(8080), null);
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		boolean[] serverConnect = new boolean[1];
 		boolean[] serverError = new boolean[1];
 		boolean[] serverClose = new boolean[1];

@@ -54,10 +54,16 @@ public class RestServer {
 	 * Creates a new RestServer, ready to be started with start() once handlers have been installed.
 	 * 
 	 * @param bindAddress The interface to bind.
-	 * @param port The port on which to listen.
+	 * @param staticContentResource The description of how to handle static resources (no static if null).
+	 * @param cacheControl The cache control string for the static resources (default if null - 
+	 * "no-store,no-cache,must-revalidate" is good for disabling).
 	 * @param staticContentResource Handler for static resources (null if no general static handling required).
 	 */
-	public RestServer(InetSocketAddress bindAddress, Resource staticContentResource) {
+	public RestServer(InetSocketAddress bindAddress
+			, Resource staticContentResource
+			, String cacheControl
+	)
+	{
 		_entryPoint = new EntryPoint();
 		_server = new Server(bindAddress);
 		
@@ -66,6 +72,10 @@ public class RestServer {
 		if (null != staticContentResource) {
 			staticResources = new ResourceHandler();
 			staticResources.setBaseResource(staticContentResource);
+			if (null != cacheControl)
+			{
+				staticResources.setCacheControl(cacheControl);
+			}
 		}
 		
 		// We need to create a ServletContextHandler in order to check the request path in web socket connections and we will request that it enables session management.
