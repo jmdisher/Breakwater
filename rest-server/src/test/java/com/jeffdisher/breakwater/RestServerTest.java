@@ -363,6 +363,7 @@ public class RestServerTest {
 	@Test
 	public void testWebSocket() throws Throwable {
 		CountDownLatch closeLatch = new CountDownLatch(2);
+		CountDownLatch clientReadLatch = new CountDownLatch(2);
 		Throwable[] failureReference = new Throwable[1];
 		RestServer server = new RestServer(new InetSocketAddress(8080), null);
 		// We want to create a server with 2 protocols, at the same root address, so make sure that we can resolve multiple protocols.
@@ -455,6 +456,7 @@ public class RestServerTest {
 			public void onText(RemoteEndpoint endpoint, String message)
 			{
 				textOut[0] = message;
+				clientReadLatch.countDown();
 			}
 		};
 		byte[] binaryOut = new byte[4];
@@ -469,7 +471,7 @@ public class RestServerTest {
 			{
 				Assert.assertEquals(binaryOut.length, len);
 				System.arraycopy(payload, offset, binaryOut, 0, len);
-				
+				clientReadLatch.countDown();
 			}
 			@Override
 			public void onText(RemoteEndpoint endpoint, String message)
@@ -483,6 +485,8 @@ public class RestServerTest {
 		byte[] binary = new byte[] { 0, 1, 2, 3 };
 		textClient.sendText(text);
 		binaryClient.sendBinary(binary);
+		// We want to wait for the clients to finish their round-trip before we stop them.
+		clientReadLatch.await();
 		textClient.stop();
 		binaryClient.stop();
 		closeLatch.await();
