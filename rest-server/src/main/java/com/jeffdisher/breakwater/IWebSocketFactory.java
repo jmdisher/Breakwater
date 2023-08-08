@@ -14,8 +14,8 @@ public interface IWebSocketFactory {
 	 * number of variables requested when registering the factory.
 	 * 
 	 * @param upgradeRequest The actual HTTP protocol upgrade request.
-	 * @param variables The variables from the requested path of the web socket.
+	 * @param path The requested path of the web socket, parsed as an array of types.
 	 * @return A Jetty WebSocketListener, or null if the upgrade request should be rejected.
 	 */
-	WebSocketListener create(JettyServerUpgradeRequest upgradeRequest, String[] variables);
+	WebSocketListener create(JettyServerUpgradeRequest upgradeRequest, Object[] path);
 }

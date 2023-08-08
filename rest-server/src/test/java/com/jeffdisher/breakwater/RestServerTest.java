@@ -45,9 +45,9 @@ public class RestServerTest {
 	public void testBasicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addGetHandler("/test1", 0, new IGetHandler() {
+		server.addGetHandler("/test1", new IGetHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -63,9 +63,9 @@ public class RestServerTest {
 	@Test
 	public void testNotFound() throws Throwable {
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addGetHandler("/test1", 0, new IGetHandler() {
+		server.addGetHandler("/test1", new IGetHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
@@ -80,18 +80,18 @@ public class RestServerTest {
 	public void testDynamicHandle() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addGetHandler("/test1", 0, new IGetHandler() {
+		server.addGetHandler("/test1", new IGetHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("TESTING");
-				server.addGetHandler("/test2", 1, new IGetHandler() {
+				server.addGetHandler("/test2/{string}", new IGetHandler() {
 					@Override
-					public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables) throws IOException {
+					public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 						response.setContentType("text/plain;charset=utf-8");
 						response.setStatus(HttpServletResponse.SC_OK);
-						response.getWriter().print(variables[0]);
+						response.getWriter().print((String)path[1]);
 						stopLatch.countDown();
 					}});
 				stopLatch.countDown();
@@ -109,9 +109,9 @@ public class RestServerTest {
 	public void testPutBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addPutHandler("/test", 0, new IPutHandler() {
+		server.addPutHandler("/test", new IPutHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] variables, InputStream inputStream) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path, InputStream inputStream) throws IOException {
 				response.setContentType("application/octet-stream");
 				response.setStatus(HttpServletResponse.SC_OK);
 				OutputStream stream = response.getOutputStream();
@@ -135,9 +135,9 @@ public class RestServerTest {
 	public void testPostParts() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
+		server.addPostMultiPartHandler("/test", new IPostMultiPartHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path, StringMultiMap<byte[]> multiPart) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + multiPart.valueCount());
@@ -159,9 +159,9 @@ public class RestServerTest {
 	public void testDelete() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addDeleteHandler("/test", 0, new IDeleteHandler() {
+		server.addDeleteHandler("/test", new IDeleteHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("DELETE/test");
@@ -179,9 +179,9 @@ public class RestServerTest {
 	public void testPostPartsDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addPostMultiPartHandler("/test", 0, new IPostMultiPartHandler() {
+		server.addPostMultiPartHandler("/test", new IPostMultiPartHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<byte[]> multiPart) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path, StringMultiMap<byte[]> multiPart) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + multiPart.valueCount());
@@ -204,9 +204,9 @@ public class RestServerTest {
 	public void testPostFormDuplicate() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addPostFormHandler("/test", 0, new IPostFormHandler() {
+		server.addPostFormHandler("/test", new IPostFormHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, StringMultiMap<String> formVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path, StringMultiMap<String> formVariables) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				response.getWriter().print("" + formVariables.valueCount());
@@ -229,9 +229,9 @@ public class RestServerTest {
 	public void testPostRawBinary() throws Throwable {
 		CountDownLatch stopLatch = new CountDownLatch(1);
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
-		server.addPostRawHandler("/test", 0, new IPostRawHandler() {
+		server.addPostRawHandler("/test", new IPostRawHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				InputStream stream = request.getInputStream();
 				int postSize = 0;
 				byte[] raw = new byte[1024];
@@ -266,9 +266,9 @@ public class RestServerTest {
 	public void testSessionState() throws Throwable {
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		HttpClient httpClient = new HttpClient();
-		server.addPostRawHandler("/start", 0, new IPostRawHandler() {
+		server.addPostRawHandler("/start", new IPostRawHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				response.setContentType("text/plain;charset=utf-8");
 				response.setStatus(HttpServletResponse.SC_OK);
 				byte[] rawPost = request.getInputStream().readAllBytes();
@@ -279,9 +279,9 @@ public class RestServerTest {
 					request.getSession(true).invalidate();
 				}
 			}});
-		server.addGetHandler("/get", 0, new IGetHandler() {
+		server.addGetHandler("/get", new IGetHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				HttpSession session = request.getSession(false);
 				if (null != session) {
 					response.setContentType("text/plain;charset=utf-8");
@@ -292,9 +292,9 @@ public class RestServerTest {
 				}
 			}
 		});
-		server.addPutHandler("/put", 0, new IPutHandler() {
+		server.addPutHandler("/put", new IPutHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables, InputStream inputStream) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path, InputStream inputStream) throws IOException {
 				HttpSession session = request.getSession(false);
 				if (null != session) {
 					response.setContentType("text/plain;charset=utf-8");
@@ -305,9 +305,9 @@ public class RestServerTest {
 				}
 			}
 		});
-		server.addDeleteHandler("/delete", 0, new IDeleteHandler() {
+		server.addDeleteHandler("/delete", new IDeleteHandler() {
 			@Override
-			public void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException {
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
 				HttpSession session = request.getSession(false);
 				if (null != session) {
 					response.setContentType("text/plain;charset=utf-8");
@@ -367,7 +367,7 @@ public class RestServerTest {
 		Throwable[] failureReference = new Throwable[1];
 		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
 		// We want to create a server with 2 protocols, at the same root address, so make sure that we can resolve multiple protocols.
-		server.addWebSocketFactory("/ws", 1, "textPrefix", (JettyServerUpgradeRequest upgradeRequest, String[] variables) -> new NamedListener(variables) {
+		server.addWebSocketFactory("/ws/{string}", "textPrefix", (JettyServerUpgradeRequest upgradeRequest, Object[] path) -> new NamedListener((String)path[1]) {
 			@Override
 			public void onConnect(String name, RemoteEndpoint endpoint)
 			{
@@ -400,7 +400,7 @@ public class RestServerTest {
 				closeLatch.countDown();
 			}
 		});
-		server.addWebSocketFactory("/ws", 1, "binaryRotate", (JettyServerUpgradeRequest upgradeRequest, String[] variables) -> new NamedListener(variables) {
+		server.addWebSocketFactory("/ws/{string}", "binaryRotate", (JettyServerUpgradeRequest upgradeRequest, Object[] path) -> new NamedListener((String)path[1]) {
 			@Override
 			public void onConnect(String name, RemoteEndpoint endpoint)
 			{
@@ -644,7 +644,7 @@ public class RestServerTest {
 		boolean[] serverError = new boolean[1];
 		boolean[] serverClose = new boolean[1];
 		// Create a single end-point which will only pass if we give it a specific variable.
-		server.addWebSocketFactory("/ws", 1, "filter", (JettyServerUpgradeRequest upgradeRequest, String[] variables) ->  "filter".equals(variables[0]) ? new NamedListener(variables) {
+		server.addWebSocketFactory("/ws/{string}", "filter", (JettyServerUpgradeRequest upgradeRequest, Object[] path) ->  "filter".equals(path[1]) ? new NamedListener((String)path[1]) {
 			@Override
 			public void onConnect(String name, RemoteEndpoint endpoint)
 			{
@@ -739,6 +739,35 @@ public class RestServerTest {
 		server.stop();
 	}
 
+	@Test
+	public void testCustomTypes() throws Throwable {
+		RestServer server = new RestServer(new InetSocketAddress(8080), null, null);
+		server.installPathParser("int", (String raw) -> Integer.parseInt(raw));
+		server.installPathParser("5", (String raw) -> (5 == raw.length()) ? raw : null);
+		server.addGetHandler("/test1/{int}/{5}/{string}", new IGetHandler() {
+			@Override
+			public void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException {
+				response.setContentType("text/plain;charset=utf-8");
+				response.setStatus(HttpServletResponse.SC_OK);
+				response.getWriter().print((String) path[0]
+						+ (Integer) path[1]
+						+ (String) path[2]
+						+ (String) path[3]
+				);
+			}});
+		server.start();
+		byte[] data = RestHelpers.get("http://localhost:8080/test1");
+		Assert.assertNull(data);
+		data = RestHelpers.get("http://localhost:8080/test1/42/shorter/done");
+		Assert.assertNull(data);
+		// Show that we can still match an empty string.
+		data = RestHelpers.get("http://localhost:8080/test1/42/qwert/");
+		Assert.assertArrayEquals("test142qwert".getBytes(StandardCharsets.UTF_8), data);
+		data = RestHelpers.get("http://localhost:8080/test1/42/qwert/done");
+		Assert.assertArrayEquals("test142qwertdone".getBytes(StandardCharsets.UTF_8), data);
+		server.stop();
+	}
+
 
 	private String _sendRequest(HttpClient httpClient, HttpMethod method, String url, String loggedInUserName) throws Throwable {
 		Request request = httpClient.newRequest(url);
@@ -802,8 +831,8 @@ public class RestServerTest {
 		private final String _name;
 		private RemoteEndpoint _endpoint;
 		
-		public NamedListener(String[] variables) {
-			_name = variables[0];
+		public NamedListener(String name) {
+			_name = name;
 		}
 		@Override
 		public void onWebSocketClose(int statusCode, String reason) {

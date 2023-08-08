@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 
-public interface IDeleteHandler {
-	void handle(HttpServletRequest request, HttpServletResponse response, String[] pathVariables) throws IOException;
+public interface IDeleteHandler
+{
+	void handle(HttpServletRequest request, HttpServletResponse response, Object[] path) throws IOException;
 }

@@ -7,6 +7,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,9 @@ import org.eclipse.jetty.websocket.server.JettyWebSocketServlet;
 import org.eclipse.jetty.websocket.server.JettyWebSocketServletFactory;
 import org.eclipse.jetty.websocket.server.config.JettyWebSocketServletContainerInitializer;
 
+import com.jeffdisher.breakwater.paths.ConstantPathParser;
+import com.jeffdisher.breakwater.paths.IPathParser;
+import com.jeffdisher.breakwater.paths.StringPathParser;
 import com.jeffdisher.breakwater.utilities.Assert;
 
 import jakarta.servlet.MultipartConfigElement;
@@ -49,6 +53,8 @@ public class RestServer {
 	private final List<HandlerTuple<IPostRawHandler>> _postRawHandlers;
 	private final List<HandlerTuple<IPutHandler>> _putHandlers;
 	private final List<WebSocketFactoryTuple> _webSocketFactories;
+	
+	private final Map<String, IPathParser> _pathParsers;
 
 	/**
 	 * Creates a new RestServer, ready to be started with start() once handlers have been installed.
@@ -101,48 +107,61 @@ public class RestServer {
 		_postRawHandlers = new ArrayList<>();
 		_putHandlers = new ArrayList<>();
 		_webSocketFactories = new ArrayList<>();
+		
+		// Setup the path parsers with the built-in types.
+		_pathParsers = new HashMap<>();
+		// "string" matches on any string path component.
+		_pathParsers.put("string", new StringPathParser());
 	}
 
-	public void addDeleteHandler(String pathPrefix, int variableCount, IDeleteHandler handler) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_deleteHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	/**
+	 * Installs a custom handler for data types in inline paths.  If "name" is the type, it can be referenced as
+	 * "{name}" in the paths.
+	 * 
+	 * @param name The name used to identify the parser in paths.
+	 * @param parser The parser to use to interpret data in these path components.
+	 */
+	public void installPathParser(String name, IPathParser parser)
+	{
+		Assert.assertTrue(name.length() > 0);
+		Assert.assertTrue(null != parser);
+		Assert.assertTrue(!_pathParsers.containsKey(name));
+		_pathParsers.put(name, parser);
 	}
 
-	public void addGetHandler(String pathPrefix, int variableCount, IGetHandler handler) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_getHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	public void addDeleteHandler(String path, IDeleteHandler handler)
+	{
+		_deleteHandlers.add(0, new HandlerTuple<>(_parsePath(path), handler));
 	}
 
-	public void addPostFormHandler(String pathPrefix, int variableCount, IPostFormHandler handler) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_postFormHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	public void addGetHandler(String path, IGetHandler handler)
+	{
+		_getHandlers.add(0, new HandlerTuple<>(_parsePath(path), handler));
 	}
 
-	public void addPostMultiPartHandler(String pathPrefix, int variableCount, IPostMultiPartHandler handler) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_postMultiPartHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	public void addPostFormHandler(String path, IPostFormHandler handler)
+	{
+		_postFormHandlers.add(0, new HandlerTuple<>(_parsePath(path), handler));
 	}
 
-	public void addPostRawHandler(String pathPrefix, int variableCount, IPostRawHandler handler) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_postRawHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	public void addPostMultiPartHandler(String path, IPostMultiPartHandler handler)
+	{
+		_postMultiPartHandlers.add(0, new HandlerTuple<>(_parsePath(path), handler));
 	}
 
-	public void addPutHandler(String pathPrefix, int variableCount, IPutHandler handler) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_putHandlers.add(0, new HandlerTuple<>(pathPrefix, variableCount, handler));
+	public void addPostRawHandler(String path, IPostRawHandler handler)
+	{
+		_postRawHandlers.add(0, new HandlerTuple<>(_parsePath(path), handler));
 	}
 
-	public void addWebSocketFactory(String pathPrefix, int variableCount, String protocolName, IWebSocketFactory factory) {
-		Assert.assertTrue(!pathPrefix.endsWith("/"));
-		// Note that these should be sorted to avoid matching on a variable but we will just add later handlers to the front, since they tend to be more specific.
-		_webSocketFactories.add(0, new WebSocketFactoryTuple(pathPrefix, variableCount, protocolName, factory));
+	public void addPutHandler(String path, IPutHandler handler)
+	{
+		_putHandlers.add(0, new HandlerTuple<>(_parsePath(path), handler));
+	}
+
+	public void addWebSocketFactory(String path, String protocolName, IWebSocketFactory factory)
+	{
+		_webSocketFactories.add(0, new WebSocketFactoryTuple(_parsePath(path), protocolName, factory));
 	}
 
 	public void start() {
@@ -237,13 +256,11 @@ public class RestServer {
 		private boolean _handleGet(String target, HttpServletRequest request, HttpServletResponse response) throws IOException
 		{
 			boolean found = false;
-			for (HandlerTuple<IGetHandler> tuple : _getHandlers) {
-				if (tuple.matcher.canHandle(target)) {
-					String[] variables = tuple.matcher.parseVariables(target);
-					tuple.handler.handle(request, response, variables);
-					found = true;
-					break;
-				}
+			OneMatch<IGetHandler> matched = _findMatch(_getHandlers, target);
+			if (null != matched)
+			{
+				matched.handler.handle(request, response, matched.matched);
+				found = true;
 			}
 			return found;
 		}
@@ -258,66 +275,59 @@ public class RestServer {
 			
 			if (isMultiPart)
 			{
-				for (HandlerTuple<IPostMultiPartHandler> tuple : _postMultiPartHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						StringMultiMap<byte[]> parts = new StringMultiMap<>();
-						request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
-						for (Part part : request.getParts()) {
-							String name = part.getName();
-							Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
-							byte[] data = new byte[(int)part.getSize()];
-							if (data.length > 0) {
-								InputStream stream = part.getInputStream();
-								int didRead = stream.read(data);
-								while (didRead < data.length) {
-									didRead += stream.read(data, didRead, data.length - didRead);
-								}
-							}
-							parts.append(name, data);
-							part.delete();
-							if (parts.valueCount() > MAX_VARIABLES) {
-								// We will only read the first MAX_VARIABLES, much like the form-encoded.
-								break;
+				OneMatch<IPostMultiPartHandler> matched = _findMatch(_postMultiPartHandlers, target);
+				if (null != matched)
+				{
+					StringMultiMap<byte[]> parts = new StringMultiMap<>();
+					request.setAttribute(Request.__MULTIPART_CONFIG_ELEMENT, new MultipartConfigElement(System.getProperty("java.io.tmpdir"), MAX_POST_SIZE, MAX_POST_SIZE, MAX_POST_SIZE + 1));
+					for (Part part : request.getParts()) {
+						String name = part.getName();
+						Assert.assertTrue(part.getSize() <= (long)MAX_POST_SIZE);
+						byte[] data = new byte[(int)part.getSize()];
+						if (data.length > 0) {
+							InputStream stream = part.getInputStream();
+							int didRead = stream.read(data);
+							while (didRead < data.length) {
+								didRead += stream.read(data, didRead, data.length - didRead);
 							}
 						}
-						tuple.handler.handle(request, response, variables, parts);
-						found = true;
-						break;
+						parts.append(name, data);
+						part.delete();
+						if (parts.valueCount() > MAX_VARIABLES) {
+							// We will only read the first MAX_VARIABLES, much like the form-encoded.
+							break;
+						}
 					}
+					matched.handler.handle(request, response, matched.matched, parts);
+					found = true;
 				}
 			}
 			else if (isFormEncoded)
 			{
-				for (HandlerTuple<IPostFormHandler> tuple : _postFormHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						StringMultiMap<String> form = new StringMultiMap<>();
-						MultiMap<String> parsed = new MultiMap<String>();
-						UrlEncoded.decodeTo(request.getInputStream(), parsed, StandardCharsets.UTF_8, MAX_POST_SIZE, MAX_VARIABLES);
-						for (Map.Entry<String, List<String>> entry : parsed.entrySet()) {
-							String key = entry.getKey();
-							for (String value : entry.getValue()) {
-								form.append(key, value);
-							}
+				OneMatch<IPostFormHandler> matched = _findMatch(_postFormHandlers, target);
+				if (null != matched)
+				{
+					StringMultiMap<String> form = new StringMultiMap<>();
+					MultiMap<String> parsed = new MultiMap<String>();
+					UrlEncoded.decodeTo(request.getInputStream(), parsed, StandardCharsets.UTF_8, MAX_POST_SIZE, MAX_VARIABLES);
+					for (Map.Entry<String, List<String>> entry : parsed.entrySet()) {
+						String key = entry.getKey();
+						for (String value : entry.getValue()) {
+							form.append(key, value);
 						}
-						tuple.handler.handle(request, response, variables, form);
-						found = true;
-						break;
 					}
+					matched.handler.handle(request, response, matched.matched, form);
+					found = true;
 				}
 			}
 			else
 			{
-				for (HandlerTuple<IPostRawHandler> tuple : _postRawHandlers) {
-					if (tuple.matcher.canHandle(target)) {
-						String[] variables = tuple.matcher.parseVariables(target);
-						
-						// In this case, the user will need to read the data directly from the input stream in request.
-						tuple.handler.handle(request, response, variables);
-						found = true;
-						break;
-					}
+				OneMatch<IPostRawHandler> matched = _findMatch(_postRawHandlers, target);
+				if (null != matched)
+				{
+					// In this case, the user will need to read the data directly from the input stream in request.
+					matched.handler.handle(request, response, matched.matched);
+					found = true;
 				}
 			}
 			return found;
@@ -325,56 +335,122 @@ public class RestServer {
 		private boolean _handlePut(String target, HttpServletRequest request, HttpServletResponse response) throws IOException
 		{
 			boolean found = false;
-			for (HandlerTuple<IPutHandler> tuple : _putHandlers) {
-				if (tuple.matcher.canHandle(target)) {
-					String[] variables = tuple.matcher.parseVariables(target);
-					tuple.handler.handle(request, response, variables, request.getInputStream());
-					found = true;
-					break;
-				}
+			OneMatch<IPutHandler> matched = _findMatch(_putHandlers, target);
+			if (null != matched)
+			{
+				matched.handler.handle(request, response, matched.matched, request.getInputStream());
+				found = true;
 			}
 			return found;
 		}
 		private boolean _handleDelete(String target, HttpServletRequest request, HttpServletResponse response) throws IOException
 		{
 			boolean found = false;
-			for (HandlerTuple<IDeleteHandler> tuple : _deleteHandlers) {
-				if (tuple.matcher.canHandle(target)) {
-					String[] variables = tuple.matcher.parseVariables(target);
-					tuple.handler.handle(request, response, variables);
-					found = true;
-					break;
-				}
+			OneMatch<IDeleteHandler> matched = _findMatch(_deleteHandlers, target);
+			if (null != matched)
+			{
+				matched.handler.handle(request, response, matched.matched);
+				found = true;
 			}
 			return found;
 		}
 		private WebSocketListener _handleWebSocketUpgrade(JettyServerUpgradeRequest req, JettyServerUpgradeResponse resp)
 		{
-			WebSocketListener socket = null;
 			String target = req.getRequestPath();
+			IWebSocketFactory matchedFactory = null;
+			Object[] matchedComponents = null;
 			for (WebSocketFactoryTuple tuple : _webSocketFactories) {
-				if (tuple.matcher.canHandle(target)) {
+				Object[] possible = tuple.matcher.handle(target);
+				if (null != possible)
+				{
 					// We know that we can handle this path so select the protocols.
 					boolean didMatch = false;
-					for (String subProtocol : req.getSubProtocols()) {
+					for (String subProtocol : req.getSubProtocols())
+					{
 						if (tuple.protocolName.equals(subProtocol))
 						{
-							resp.setAcceptedSubProtocol(subProtocol);
-							// We currently only support a given factory only being able to build WebSockets which implement a single protocol.
 							didMatch = true;
-							break;
 						}
 					}
 					if (didMatch)
 					{
-						String[] variables = tuple.matcher.parseVariables(target);
-						socket = tuple.factory.create(req, variables);
-						break;
+						if (null != matchedFactory)
+						{
+							// This is a static configuration error but we just log it and fail to interpret.
+							System.err.println("Ambiguous parse for WebSocket target: \"" + target + "\"");
+							matchedFactory = null;
+							matchedComponents = null;
+							break;
+						}
+						else
+						{
+							matchedFactory = tuple.factory;
+							matchedComponents = possible;
+						}
 					}
 				}
 			}
-			return socket;
+			
+			// Create the factory if we had a single match.
+			return (null != matchedFactory)
+					? matchedFactory.create(req, matchedComponents)
+					: null
+			;
 		}
+	}
+
+	private IPathParser[] _parsePath(String path)
+	{
+		// We always expect a path to start with a / but never end with one.
+		Assert.assertTrue(path.startsWith("/"));
+		Assert.assertTrue(!path.endsWith("/"));
+		// We want to permit empty trailing paths as a constant handler so use a negative limit.
+		String[] parts = path.split("/", -1);
+		IPathParser[] parsers = new IPathParser[parts.length - 1];
+		for (int i = 0; i < parsers.length; ++i)
+		{
+			String part = parts[i + 1];
+			if (part.contains("{"))
+			{
+				// This is something which must be a variable type.
+				Assert.assertTrue(part.startsWith("{"));
+				Assert.assertTrue(part.endsWith("}"));
+				String check = part.substring(1, part.length() - 1);
+				parsers[i] = _pathParsers.get(check);
+				if (null == parsers[i])
+				{
+					throw new IllegalArgumentException("Type not known: " + check);
+				}
+			}
+			else
+			{
+				parsers[i] = new ConstantPathParser(part);
+			}
+		}
+		return parsers;
+	}
+
+	private static <T> OneMatch<T> _findMatch(List<HandlerTuple<T>> handlers, String target)
+	{
+		OneMatch<T> matched = null;
+		for (HandlerTuple<T> tuple : handlers) {
+			Object[] possible = tuple.matcher.handle(target);
+			if (null != possible)
+			{
+				if (null != matched)
+				{
+					// This is a static configuration error but we just log it and fail to interpret.
+					System.err.println("Ambiguous parse for target: \"" + target + "\"");
+					matched = null;
+					break;
+				}
+				else
+				{
+					matched = new OneMatch<T>(tuple.handler, possible);
+				}
+			}
+		}
+		return matched;
 	}
 
 
@@ -382,8 +458,8 @@ public class RestServer {
 		public final PathMatcher matcher;
 		public final T handler;
 		
-		public HandlerTuple(String pathPrefix, int variableCount, T handler) {
-			this.matcher = new PathMatcher(pathPrefix, variableCount);
+		public HandlerTuple(IPathParser[] parsers, T handler) {
+			this.matcher = new PathMatcher(parsers);
 			this.handler = handler;
 		}
 	}
@@ -394,8 +470,8 @@ public class RestServer {
 		public final String protocolName;
 		public final IWebSocketFactory factory;
 		
-		public WebSocketFactoryTuple(String pathPrefix, int variableCount, String protocolName, IWebSocketFactory factory) {
-			this.matcher = new PathMatcher(pathPrefix, variableCount);
+		public WebSocketFactoryTuple(IPathParser[] parsers, String protocolName, IWebSocketFactory factory) {
+			this.matcher = new PathMatcher(parsers);
 			this.protocolName = protocolName;
 			this.factory = factory;
 		}
@@ -403,27 +479,51 @@ public class RestServer {
 
 
 	private static class PathMatcher {
-		private final String _pathPrefix;
-		private final int _variableCount;
+		private final IPathParser[] _parsers;
 		
-		public PathMatcher(String pathPrefix, int variableCount) {
-			_pathPrefix = pathPrefix;
-			_variableCount = variableCount;
+		public PathMatcher(IPathParser[] parsers) {
+			_parsers = parsers;
 		}
 		
-		public boolean canHandle(String target) {
-			return target.startsWith(_pathPrefix) && ((target.substring(_pathPrefix.length()).split("/").length - 1) == _variableCount);
-		}
-		
-		public String[] parseVariables(String target) {
-			String variableString = target.substring(_pathPrefix.length());
-			String[] variables = new String[_variableCount];
-			System.arraycopy(variableString.split("/"), 1, variables, 0, _variableCount);
-			for (int i = 0; i < variables.length; ++i)
+		public Object[] handle(String target) {
+			Object[] matched = null;
+			Assert.assertTrue(target.startsWith("/"));
+			// We do want to include the final path component, even if empty, so use a negative limit.
+			String[] parts = target.split("/", -1);
+			if (_parsers.length == (parts.length - 1))
 			{
-				variables[i] = URLDecoder.decode(variables[i], StandardCharsets.UTF_8);
+				matched = new Object[_parsers.length];
+				for (int i = 0; i < matched.length; ++i)
+				{
+					try
+					{
+						String raw = URLDecoder.decode(parts[i + 1], StandardCharsets.UTF_8);
+						matched[i] = _parsers[i].parse(raw);
+					}
+					catch (Throwable t)
+					{
+						// This will just fall into the null check.
+					}
+					if (null == matched[i])
+					{
+						matched = null;
+						break;
+					}
+				}
 			}
-			return variables;
+			return matched;
+		}
+	}
+
+
+	private static class OneMatch<T>
+	{
+		private final T handler;
+		private final Object[] matched;
+		public OneMatch(T handler, Object[] matched)
+		{
+			this.handler = handler;
+			this.matched = matched;
 		}
 	}
 }
