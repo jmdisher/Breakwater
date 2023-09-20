@@ -386,6 +386,9 @@ public class RestServer {
 						{
 							matchedFactory = tuple.factory;
 							matchedComponents = possible;
+							// Be sure to set the accepted sub-protocol.
+							// Without this, we see "Sent non-empty 'Sec-WebSocket-Protocol' header" error on Chromium (not sure why not other browsers since this appears to be required).
+							resp.setAcceptedSubProtocol(tuple.protocolName);
 						}
 					}
 				}

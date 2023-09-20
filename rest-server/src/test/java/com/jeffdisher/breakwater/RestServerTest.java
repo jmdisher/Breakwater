@@ -904,6 +904,11 @@ public class RestServerTest {
 		}
 		@Override
 		public synchronized void onWebSocketConnect(Session session) {
+			// We expected that we requested a single protocol.
+			List<String> subProtocols = session.getUpgradeRequest().getSubProtocols();
+			Assert.assertEquals(1, subProtocols.size());
+			// We expect that to be what was accepted.
+			Assert.assertEquals(subProtocols.get(0), session.getUpgradeResponse().getAcceptedSubProtocol());
 			_endpoint = session.getRemote();
 			this.notifyAll();
 		}
