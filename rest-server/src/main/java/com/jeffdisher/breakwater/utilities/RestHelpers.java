@@ -18,6 +18,8 @@ import com.jeffdisher.breakwater.StringMultiMap;
 
 /**
  * Basic client-side REST utility methods.
+ * These are packaged along with the Breakwater server for easier testing of downstream tools as well as the creation of
+ * simple client-side utilities.
  */
 public class RestHelpers {
 	public static byte[] get(String url) throws MalformedURLException, IOException {
