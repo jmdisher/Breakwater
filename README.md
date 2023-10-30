@@ -12,12 +12,24 @@ mvn clean install
 
 ## Maven coordinates
 
-Currently, this branch is used to distribute Breakwater as a Maven dependency.  The `0.0.0-pre0` release is currently available:
+This branch is used to distribute Breakwater as a Maven dependency.  This means that you will need to add a `repositories` section to your `pom.xml` in order to access the build:
 
-<dependencies>
-	<dependency>
-		<groupId>com.jeffdisher.breakwater</groupId>
-		<artifactId>rest-server</artifactId>
-		<version>0.0.0-pre0</version>
-	</dependency>
-</dependencies>
+```
+	<repositories>
+		<repository>
+			<id>breakwater-repo</id>
+			<url>https://github.com/jmdisher/Breakwater/raw/maven/repo</url>
+		</repository>
+	</repositories>
+```
+
+From there, the `0.3.1` release (for example), can be included:
+
+```
+		<dependency>
+			<groupId>com.jeffdisher.breakwater</groupId>
+			<artifactId>rest-server</artifactId>
+			<version>0.3.1</version>
+		</dependency>
+```
+
